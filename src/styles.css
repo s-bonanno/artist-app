@@ -3,8 +3,8 @@
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  background: #111113;
-  color: #f4f4f5;
+  background: #101113;
+  color: #f7f5ef;
 }
 
 * {
@@ -15,6 +15,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: #101113;
 }
 
 button,
@@ -26,21 +27,33 @@ button {
   border: 0;
 }
 
+button,
+label {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #d6b56d;
+  outline-offset: 2px;
+}
+
 .app-shell {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 336px minmax(0, 1fr);
   min-height: 100vh;
-  background: #151517;
+  background: #101113;
 }
 
 .library-panel {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 20px;
-  border-right: 1px solid #2d2d31;
-  background: #1b1b1f;
+  gap: 18px;
+  padding: 22px;
+  border-right: 1px solid #292a2e;
+  background: #191a1d;
   min-height: 100vh;
+  box-shadow: inset -1px 0 0 rgb(255 255 255 / 0.02);
 }
 
 .panel-heading,
@@ -54,7 +67,7 @@ button {
 .eyebrow,
 .section-label {
   margin: 0 0 4px;
-  color: #a1a1aa;
+  color: #9f9b91;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
@@ -66,6 +79,7 @@ h2 {
   margin: 0;
   font-size: 22px;
   line-height: 1.15;
+  letter-spacing: 0;
 }
 
 .icon-button,
@@ -77,9 +91,14 @@ h2 {
   gap: 8px;
   min-height: 38px;
   border-radius: 8px;
-  color: #f8fafc;
-  background: #303036;
+  color: #f7f5ef;
+  background: #303136;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
 }
 
 .icon-button:disabled,
@@ -90,13 +109,15 @@ h2 {
 
 .icon-button {
   width: 40px;
+  border: 1px solid #3c3d43;
 }
 
 .primary-button {
   padding: 0 14px;
-  background: #e7e5e4;
-  color: #18181b;
+  background: #d6b56d;
+  color: #191613;
   font-weight: 700;
+  border: 1px solid #e0c783;
 }
 
 .primary-button:disabled {
@@ -107,7 +128,17 @@ h2 {
 .secondary-button {
   width: 100%;
   padding: 0 12px;
-  background: #26262b;
+  background: #25262b;
+  border: 1px solid #35363c;
+}
+
+.icon-button:not(:disabled):hover,
+.secondary-button:not(:disabled):hover {
+  background: #383940;
+}
+
+.primary-button:not(:disabled):hover {
+  background: #e3c37a;
 }
 
 .upload-callout,
@@ -115,10 +146,10 @@ h2 {
   display: flex;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #333338;
+  border: 1px solid #303137;
   border-radius: 8px;
-  color: #d4d4d8;
-  background: #222226;
+  color: #d7d2c6;
+  background: #202126;
   font-size: 13px;
 }
 
@@ -131,7 +162,7 @@ h2 {
 }
 
 .reference-details span {
-  color: #a1a1aa;
+  color: #9f9b91;
   font-size: 12px;
 }
 
@@ -149,30 +180,37 @@ h2 {
 
 .reference-card {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 76px 1fr;
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 8px;
-  border: 1px solid #333338;
+  padding: 9px;
+  border: 1px solid #303137;
   border-radius: 8px;
-  color: #f4f4f5;
-  background: #242428;
+  color: #f7f5ef;
+  background: #222329;
   text-align: left;
   cursor: pointer;
+  min-height: 96px;
 }
 
 .reference-card[data-selected="true"] {
-  border-color: #e7e5e4;
-  background: #303036;
+  border-color: #d6b56d;
+  background: #2b2a27;
+  box-shadow: 0 0 0 1px rgb(214 181 109 / 0.18);
+}
+
+.reference-card:hover {
+  border-color: #56534c;
+  background: #292a30;
 }
 
 .reference-card img {
-  width: 72px;
+  width: 76px;
   aspect-ratio: 4 / 5;
   object-fit: cover;
-  border-radius: 6px;
-  background: #111113;
+  border-radius: 5px;
+  background: #101113;
 }
 
 .workspace {
@@ -183,18 +221,22 @@ h2 {
 }
 
 .workspace-toolbar {
-  padding: 18px 24px;
-  border-bottom: 1px solid #2d2d31;
-  background: #19191c;
+  padding: 18px 28px;
+  border-bottom: 1px solid #292a2e;
+  background: #17181b;
 }
 
 .canvas-stage {
   display: grid;
   place-items: center;
   min-height: 0;
-  padding: 24px;
+  padding: 34px;
   overflow: hidden;
-  background: #111113;
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 0.025) 1px, transparent 1px),
+    linear-gradient(rgb(255 255 255 / 0.025) 1px, transparent 1px),
+    #101113;
+  background-size: 28px 28px;
 }
 
 .canvas-stage canvas {
@@ -203,8 +245,10 @@ h2 {
   max-height: calc(100vh - 250px);
   width: auto;
   height: auto;
-  border: 1px solid #333338;
-  box-shadow: 0 24px 80px rgb(0 0 0 / 0.3);
+  border: 1px solid #3b3c42;
+  box-shadow:
+    0 30px 90px rgb(0 0 0 / 0.42),
+    0 0 0 10px rgb(255 255 255 / 0.018);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -218,9 +262,9 @@ h2 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
-  padding: 18px 24px;
-  border-top: 1px solid #2d2d31;
-  background: #19191c;
+  padding: 18px 28px 20px;
+  border-top: 1px solid #292a2e;
+  background: #17181b;
 }
 
 .control-group {
@@ -234,16 +278,16 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #f4f4f5;
+  color: #f7f5ef;
   font-weight: 700;
 }
 
 .control-group label {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr) 44px;
   align-items: center;
   gap: 10px;
-  color: #c7c7cf;
+  color: #cfc8ba;
   font-size: 13px;
 }
 
@@ -251,16 +295,23 @@ h2 {
   grid-template-columns: 1fr auto !important;
 }
 
+.control-group label strong {
+  color: #9f9b91;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
 input[type="range"] {
   width: 100%;
-  accent-color: #e7e5e4;
+  accent-color: #d6b56d;
 }
 
 input[type="color"] {
   width: 42px;
   height: 28px;
   padding: 0;
-  border: 1px solid #3f3f46;
+  border: 1px solid #3f403f;
   border-radius: 6px;
   background: transparent;
 }
@@ -270,20 +321,21 @@ input[type="color"] {
   grid-template-columns: 1fr 1fr;
   padding: 3px;
   border-radius: 8px;
-  background: #26262b;
+  background: #24252a;
+  border: 1px solid #33343a;
 }
 
 .segmented-control button {
   min-height: 34px;
   border-radius: 6px;
-  color: #a1a1aa;
+  color: #a8a195;
   background: transparent;
   cursor: pointer;
 }
 
 .segmented-control button[data-active="true"] {
-  color: #18181b;
-  background: #e7e5e4;
+  color: #191613;
+  background: #d6b56d;
   font-weight: 700;
 }
 

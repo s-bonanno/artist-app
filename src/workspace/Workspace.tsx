@@ -119,6 +119,7 @@ export function Workspace({ state, onChange }: WorkspaceProps) {
               value={state.grid.spacing}
               onChange={(event) => updateGrid({ spacing: Number(event.target.value) })}
             />
+            <strong>{state.grid.spacing}px</strong>
           </label>
           <label>
             <span>Opacity</span>
@@ -130,6 +131,7 @@ export function Workspace({ state, onChange }: WorkspaceProps) {
               value={state.grid.opacity}
               onChange={(event) => updateGrid({ opacity: Number(event.target.value) })}
             />
+            <strong>{Math.round(state.grid.opacity * 100)}%</strong>
           </label>
           <label>
             <span>Color</span>
@@ -156,6 +158,7 @@ export function Workspace({ state, onChange }: WorkspaceProps) {
               value={state.viewport.zoom}
               onChange={(event) => updateViewport({ zoom: Number(event.target.value) })}
             />
+            <strong>{Math.round(state.viewport.zoom * 100)}%</strong>
           </label>
           <div className="zoom-actions">
             <button className="icon-button" title="Zoom out" onClick={() => stepZoom('out')} disabled={!state.image}>
