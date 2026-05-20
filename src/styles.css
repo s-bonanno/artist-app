@@ -255,7 +255,7 @@ h2 {
   display: grid;
   place-items: center;
   min-height: 0;
-  padding: 28px 28px 132px;
+  padding: 28px 28px 236px;
   overflow: hidden;
   background:
     radial-gradient(circle at 50% 24%, rgb(255 255 255 / 0.05), transparent 38%),
@@ -282,6 +282,126 @@ h2 {
 
 .canvas-stage canvas[data-panning="true"] {
   cursor: grabbing;
+}
+
+.tool-dock {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  left: 18px;
+  z-index: 4;
+  display: grid;
+  max-width: 720px;
+  margin: 0 auto;
+  gap: 10px;
+}
+
+.tool-panel {
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 18px;
+  background: rgb(24 25 29 / 0.86);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.36);
+  backdrop-filter: blur(22px);
+}
+
+.tool-panel-content {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.tool-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f5f5f7;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.control-row,
+.slider-row {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+  color: #c6c8cf;
+  font-size: 12px;
+}
+
+.control-row strong,
+.slider-row strong {
+  color: #8d9098;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.dimension-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.dimension-row label {
+  display: grid;
+  gap: 6px;
+  color: #c6c8cf;
+  font-size: 12px;
+}
+
+select,
+input[type="number"] {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 10px;
+  padding: 0 10px;
+  color: #f5f5f7;
+  background: rgb(255 255 255 / 0.07);
+}
+
+.control-row select {
+  grid-column: 2 / -1;
+}
+
+.control-row input[type="color"] {
+  width: 42px;
+}
+
+.tool-strip {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  justify-self: center;
+  padding: 6px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 18px;
+  background: rgb(24 25 29 / 0.9);
+  box-shadow: 0 18px 60px rgb(0 0 0 / 0.32);
+  backdrop-filter: blur(22px);
+}
+
+.tool-strip button {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  min-width: 76px;
+  min-height: 54px;
+  border-radius: 13px;
+  color: #9ea2ac;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tool-strip button[data-active="true"] {
+  color: #16171a;
+  background: #f5f5f7;
+}
+
+.tool-strip span {
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .controls-panel {
@@ -479,8 +599,37 @@ input[type="color"] {
     border-radius: 0;
   }
 
+  .tool-dock {
+    position: static;
+    max-width: none;
+    margin: 0;
+  }
+
+  .tool-panel {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .tool-strip {
+    width: 100%;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .tool-strip button {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .canvas-stage {
+    padding-bottom: 24px;
+  }
+
   .canvas-stage canvas {
-    max-height: 54vh;
+    max-height: 52vh;
   }
 
   .reference-details {

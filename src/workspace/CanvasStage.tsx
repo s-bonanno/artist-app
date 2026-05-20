@@ -2,6 +2,7 @@ import { forwardRef, PointerEvent, useEffect, useImperativeHandle, useRef, useSt
 import { drawSquareGrid } from '../grid/drawGrid';
 import type { ReferenceImage } from '../library/referenceTypes';
 import type { WorkspaceState } from '../app/appState';
+import { getCanvasPixelSize } from './canvasSizing';
 
 type CanvasStageProps = {
   image: ReferenceImage | null;
@@ -44,8 +45,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      const width = state.canvas.orientation === 'portrait' ? 900 : 1200;
-      const height = state.canvas.orientation === 'portrait' ? 1200 : 900;
+      const { width, height, pixelsPerCm } = getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm);
       canvas.width = width;
       canvas.height = height;
 
@@ -65,7 +65,13 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         ctx.drawImage(loadedImage, x, y, drawWidth, drawHeight);
       }
 
-      drawSquareGrid(ctx, width, height, state.grid);
+      drawSquareGrid(ctx, width, height, {
+        enabled: state.grid.enabled,
+        spacing: state.grid.squareSizeCm * pixelsPerCm,
+        color: state.grid.color,
+        opacity: state.grid.opacity,
+        lineWidth: state.grid.lineWidth,
+      });
     }
 
     function getCanvasScale(canvas: HTMLCanvasElement) {

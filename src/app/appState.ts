@@ -5,6 +5,8 @@ export type WorkspaceState = {
   canvas: {
     widthCm: number;
     heightCm: number;
+    unit: 'cm' | 'in';
+    presetId: string;
     orientation: 'portrait' | 'landscape';
   };
   viewport: {
@@ -14,7 +16,8 @@ export type WorkspaceState = {
   };
   grid: {
     enabled: boolean;
-    spacing: number;
+    squareSizeCm: number;
+    unit: 'cm' | 'in';
     color: string;
     opacity: number;
     lineWidth: number;
@@ -24,8 +27,10 @@ export type WorkspaceState = {
 export const initialWorkspaceState: WorkspaceState = {
   image: null,
   canvas: {
-    widthCm: 50,
-    heightCm: 50,
+    widthCm: 30.48,
+    heightCm: 40.64,
+    unit: 'in',
+    presetId: 'rect-12x16',
     orientation: 'portrait',
   },
   viewport: {
@@ -35,10 +40,10 @@ export const initialWorkspaceState: WorkspaceState = {
   },
   grid: {
     enabled: true,
-    spacing: 50,
+    squareSizeCm: 5.08,
+    unit: 'in',
     color: '#f8fafc',
     opacity: 0.7,
     lineWidth: 1,
   },
 };
-
