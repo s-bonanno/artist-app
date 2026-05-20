@@ -82,6 +82,12 @@ h2 {
   cursor: pointer;
 }
 
+.icon-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .icon-button {
   width: 40px;
 }
@@ -199,6 +205,13 @@ h2 {
   height: auto;
   border: 1px solid #333338;
   box-shadow: 0 24px 80px rgb(0 0 0 / 0.3);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.canvas-stage canvas[data-panning="true"] {
+  cursor: grabbing;
 }
 
 .controls-panel {
@@ -274,6 +287,16 @@ input[type="color"] {
   font-weight: 700;
 }
 
+.zoom-actions {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 8px;
+}
+
+.zoom-actions .icon-button {
+  min-height: 38px;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -317,4 +340,3 @@ input[type="color"] {
     max-height: 62vh;
   }
 }
-

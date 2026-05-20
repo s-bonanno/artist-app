@@ -1,4 +1,4 @@
-import { Download, Grid2X2, Image as ImageIcon, RotateCcw } from 'lucide-react';
+import { Download, Grid2X2, Image as ImageIcon, Minus, Plus, RotateCcw } from 'lucide-react';
 import { useRef } from 'react';
 import type { WorkspaceState } from '../app/appState';
 import { exportCanvas } from '../export/exportCanvas';
@@ -42,6 +42,20 @@ export function Workspace({ state, onChange }: WorkspaceProps) {
     });
   }
 
+  function setViewport(viewport: WorkspaceState['viewport']) {
+    onChange({
+      ...state,
+      viewport,
+    });
+  }
+
+  function stepZoom(direction: 'in' | 'out') {
+    const multiplier = direction === 'in' ? 1.15 : 0.85;
+    updateViewport({
+      zoom: Math.min(4, Math.max(0.2, state.viewport.zoom * multiplier)),
+    });
+  }
+
   return (
     <main className="workspace">
       <header className="workspace-toolbar">
@@ -59,7 +73,7 @@ export function Workspace({ state, onChange }: WorkspaceProps) {
         </button>
       </header>
 
-      <CanvasStage ref={canvasRef} image={state.image} state={state} />
+      <CanvasStage ref={canvasRef} image={state.image} state={state} onViewportChange={setViewport} />
 
       <section className="controls-panel" aria-label="Canvas controls">
         <div className="control-group">
@@ -136,19 +150,26 @@ export function Workspace({ state, onChange }: WorkspaceProps) {
             <span>Zoom</span>
             <input
               type="range"
-              min="0.25"
-              max="3"
+              min="0.2"
+              max="4"
               step="0.05"
               value={state.viewport.zoom}
               onChange={(event) => updateViewport({ zoom: Number(event.target.value) })}
             />
           </label>
-          <button className="secondary-button" onClick={() => updateViewport({ zoom: 1, panX: 0, panY: 0 })}>
-            Reset View
-          </button>
+          <div className="zoom-actions">
+            <button className="icon-button" title="Zoom out" onClick={() => stepZoom('out')} disabled={!state.image}>
+              <Minus size={16} />
+            </button>
+            <button className="secondary-button" onClick={() => updateViewport({ zoom: 1, panX: 0, panY: 0 })}>
+              Fit
+            </button>
+            <button className="icon-button" title="Zoom in" onClick={() => stepZoom('in')} disabled={!state.image}>
+              <Plus size={16} />
+            </button>
+          </div>
         </div>
       </section>
     </main>
   );
 }
-
