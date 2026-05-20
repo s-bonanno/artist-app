@@ -34,7 +34,7 @@ export function ReferenceLibrary({
     <aside className="library-panel" aria-label="Reference library">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Reference Library</p>
+          <p className="eyebrow">Gallery</p>
           <h1>Art Assistant</h1>
         </div>
         <label className="icon-button" title="Upload image">
@@ -50,7 +50,7 @@ export function ReferenceLibrary({
 
       <div className="upload-callout">
         <ImagePlus size={18} />
-        <span>Start with the Bargue set or upload your own reference.</span>
+        <span>Bargue studies and your uploaded references.</span>
       </div>
 
       <div className="library-section">
@@ -85,4 +85,3 @@ export function ReferenceLibrary({
     </aside>
   );
 }
-
