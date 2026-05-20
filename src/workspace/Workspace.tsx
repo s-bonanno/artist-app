@@ -1,16 +1,25 @@
 import {
+  ArrowLeft,
+  Check,
   Crop,
   Download,
+  Eye,
   Grid2X2,
   Image as ImageIcon,
   Minus,
   Move,
+  Palette as PaletteIcon,
+  Pipette,
   Plus,
   RotateCcw,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { WorkspaceState } from '../app/appState';
 import { exportCanvas } from '../export/exportCanvas';
+import { rgbToHsl } from '../palette/colorUtils';
+import type { ColorSample, SampleSize } from '../palette/paletteTypes';
 import { CanvasStage } from './CanvasStage';
 import {
   canvasPresets,
@@ -23,18 +32,48 @@ import {
 
 type WorkspaceProps = {
   state: WorkspaceState;
+  onBack: () => void;
   onChange: (nextState: WorkspaceState) => void;
 };
 
-type ActiveTool = 'canvas' | 'grid' | 'view';
+type ActiveTool = 'canvas' | 'grid' | 'palette' | 'filters' | 'view';
 
-export function Workspace({ state, onChange }: WorkspaceProps) {
+const sampleSizes: SampleSize[] = [1, 3, 5];
+
+export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [activeTool, setActiveTool] = useState<ActiveTool>('canvas');
+  const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
     [state.canvas.heightCm, state.canvas.widthCm, state.grid.unit],
   );
+
+  const canvasWidth = formatMeasurement(state.canvas.widthCm, state.canvas.unit);
+  const canvasHeight = formatMeasurement(state.canvas.heightCm, state.canvas.unit);
+  const gridSquareSize = convertFromCm(state.grid.squareSizeCm, state.grid.unit);
+  const selectedSwatch =
+    state.palette.swatches.find((swatch) => swatch.id === state.palette.selectedSwatchId) ??
+    state.palette.swatches[state.palette.swatches.length - 1] ??
+    null;
+  const selectedHsl = selectedSwatch ? rgbToHsl(selectedSwatch.rgb) : null;
+
+  function closeTool() {
+    setActiveTool(null);
+  }
+
+  function toggleTool(tool: ActiveTool) {
+    setActiveTool((currentTool) => (currentTool === tool ? null : tool));
+  }
+
+  function updateCanvas(nextCanvas: Partial<WorkspaceState['canvas']>) {
+    onChange({
+      ...state,
+      canvas: {
+        ...state.canvas,
+        ...nextCanvas,
+      },
+    });
+  }
 
   function updateGrid(nextGrid: Partial<WorkspaceState['grid']>) {
     onChange({
@@ -46,12 +85,22 @@ export function Workspace({ state, onChange }: WorkspaceProps) {
     });
   }
 
-  function updateCanvas(nextCanvas: Partial<WorkspaceState['canvas']>) {
+  function updateFilters(nextFilters: Partial<WorkspaceState['filters']>) {
     onChange({
       ...state,
-      canvas: {
-        ...state.canvas,
-        ...nextCanvas,
+      filters: {
+        ...state.filters,
+        ...nextFilters,
+      },
+    });
+  }
+
+  function updatePalette(nextPalette: Partial<WorkspaceState['palette']>) {
+    onChange({
+      ...state,
+      palette: {
+        ...state.palette,
+        ...nextPalette,
       },
     });
   }
@@ -139,235 +188,475 @@ export function Workspace({ state, onChange }: WorkspaceProps) {
     });
   }
 
-  const canvasWidth = formatMeasurement(state.canvas.widthCm, state.canvas.unit);
-  const canvasHeight = formatMeasurement(state.canvas.heightCm, state.canvas.unit);
-  const gridSquareSize = convertFromCm(state.grid.squareSizeCm, state.grid.unit);
+  function addSwatch(sample: ColorSample) {
+    const id = crypto.randomUUID();
+
+    onChange({
+      ...state,
+      palette: {
+        ...state.palette,
+        swatches: [
+          ...state.palette.swatches,
+          {
+            ...sample,
+            id,
+            name: `Swatch ${state.palette.swatches.length + 1}`,
+          },
+        ],
+        selectedSwatchId: id,
+      },
+    });
+  }
+
+  function removeSelectedSwatch() {
+    if (!selectedSwatch) return;
+
+    const nextSwatches = state.palette.swatches.filter((swatch) => swatch.id !== selectedSwatch.id);
+
+    updatePalette({
+      swatches: nextSwatches,
+      selectedSwatchId: nextSwatches[nextSwatches.length - 1]?.id ?? null,
+    });
+  }
+
+  function resetFilters() {
+    updateFilters({
+      blur: 0,
+      exposure: 0,
+      contrast: 0,
+      showOriginal: false,
+    });
+  }
+
+  function renderSheet() {
+    if (!activeTool) return null;
+
+    return (
+      <div className="tool-sheet">
+        <div className="tool-sheet-heading">
+          <button type="button" className="icon-button compact" title="Close tool" onClick={closeTool}>
+            <X size={16} />
+          </button>
+          <strong>{getToolLabel(activeTool)}</strong>
+          <button type="button" className="icon-button compact" title="Done" onClick={closeTool}>
+            <Check size={16} />
+          </button>
+        </div>
+
+        {activeTool === 'canvas' ? (
+          <div className="tool-panel-content">
+            <label className="control-row">
+              <span>Preset</span>
+              <select value={state.canvas.presetId} onChange={(event) => selectPreset(event.target.value)}>
+                <option value="custom">Custom</option>
+                {canvasPresets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="segmented-control" aria-label="Canvas units">
+              <button type="button" data-active={state.canvas.unit === 'cm'} onClick={() => setCanvasUnit('cm')}>
+                cm
+              </button>
+              <button type="button" data-active={state.canvas.unit === 'in'} onClick={() => setCanvasUnit('in')}>
+                in
+              </button>
+            </div>
+
+            <div className="dimension-row">
+              <label>
+                <span>Width</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
+                  value={canvasWidth}
+                  onChange={(event) => setCanvasDimension('widthCm', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Height</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
+                  value={canvasHeight}
+                  onChange={(event) => setCanvasDimension('heightCm', event.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="segmented-control" aria-label="Canvas orientation">
+              <button type="button" data-active={state.canvas.orientation === 'portrait'} onClick={() => setOrientation('portrait')}>
+                Portrait
+              </button>
+              <button type="button" data-active={state.canvas.orientation === 'landscape'} onClick={() => setOrientation('landscape')}>
+                Landscape
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {activeTool === 'grid' ? (
+          <div className="tool-panel-content">
+            <label className="toggle-row">
+              <span>Show grid</span>
+              <input
+                type="checkbox"
+                checked={state.grid.enabled}
+                onChange={(event) => updateGrid({ enabled: event.target.checked })}
+              />
+            </label>
+
+            <div className="segmented-control" aria-label="Grid units">
+              <button type="button" data-active={state.grid.unit === 'cm'} onClick={() => setGridUnit('cm')}>
+                cm
+              </button>
+              <button type="button" data-active={state.grid.unit === 'in'} onClick={() => setGridUnit('in')}>
+                in
+              </button>
+            </div>
+
+            <label className="control-row">
+              <span>Square</span>
+              <input
+                type="number"
+                min={gridLimits.min}
+                max={gridLimits.max}
+                step={gridLimits.step}
+                value={formatMeasurement(state.grid.squareSizeCm, state.grid.unit)}
+                onChange={(event) => setGridSquareSize(event.target.value)}
+              />
+              <strong>{state.grid.unit}</strong>
+            </label>
+
+            <label className="slider-row">
+              <span>Scale</span>
+              <input
+                type="range"
+                min={gridLimits.min}
+                max={gridLimits.max}
+                step={gridLimits.step}
+                value={gridSquareSize}
+                onChange={(event) => setGridSquareSize(event.target.value)}
+              />
+              <strong>
+                {formatMeasurement(state.grid.squareSizeCm, state.grid.unit)} {state.grid.unit}
+              </strong>
+            </label>
+
+            <label className="slider-row">
+              <span>Opacity</span>
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.05"
+                value={state.grid.opacity}
+                onChange={(event) => updateGrid({ opacity: Number(event.target.value) })}
+              />
+              <strong>{Math.round(state.grid.opacity * 100)}%</strong>
+            </label>
+
+            <label className="slider-row">
+              <span>Line</span>
+              <input
+                type="range"
+                min="0.5"
+                max="5"
+                step="0.5"
+                value={state.grid.lineWidth}
+                onChange={(event) => updateGrid({ lineWidth: Number(event.target.value) })}
+              />
+              <strong>{state.grid.lineWidth}px</strong>
+            </label>
+
+            <label className="control-row">
+              <span>Color</span>
+              <input
+                type="color"
+                value={state.grid.color}
+                onChange={(event) => updateGrid({ color: event.target.value })}
+              />
+            </label>
+          </div>
+        ) : null}
+
+        {activeTool === 'palette' ? (
+          <div className="tool-panel-content">
+            <div className="segmented-control" aria-label="Palette sample source">
+              <button
+                type="button"
+                data-active={state.palette.source === 'filtered'}
+                onClick={() => updatePalette({ source: 'filtered' })}
+              >
+                Filtered
+              </button>
+              <button
+                type="button"
+                data-active={state.palette.source === 'original'}
+                onClick={() => updatePalette({ source: 'original' })}
+              >
+                Original
+              </button>
+            </div>
+
+            <div className="segmented-control" data-options="3" aria-label="Palette sample size">
+              {sampleSizes.map((sampleSize) => (
+                <button
+                  key={sampleSize}
+                  type="button"
+                  data-active={state.palette.sampleSize === sampleSize}
+                  onClick={() => updatePalette({ sampleSize })}
+                >
+                  {sampleSize}px
+                </button>
+              ))}
+            </div>
+
+            <div className="palette-block">
+              <span>Swatches</span>
+              <div className="swatch-strip">
+                {state.palette.swatches.length ? (
+                  state.palette.swatches.map((swatch) => (
+                    <button
+                      key={swatch.id}
+                      type="button"
+                      className="swatch-chip"
+                      title={swatch.hex}
+                      style={{ backgroundColor: swatch.hex }}
+                      data-active={selectedSwatch?.id === swatch.id}
+                      onClick={() => updatePalette({ selectedSwatchId: swatch.id })}
+                    />
+                  ))
+                ) : (
+                  <span className="empty-swatches">Tap the image to sample</span>
+                )}
+              </div>
+            </div>
+
+            <div className="selected-swatch">
+              <div className="large-swatch" style={{ backgroundColor: selectedSwatch?.hex ?? '#2a2b30' }} />
+              {selectedSwatch ? (
+                <div>
+                  <strong>{selectedSwatch.hex}</strong>
+                  <span>RGB {selectedSwatch.rgb.join(' ')}</span>
+                  {selectedHsl ? (
+                    <span>
+                      HSL {selectedHsl.hue} {selectedHsl.saturation}% {selectedHsl.lightness}%
+                    </span>
+                  ) : null}
+                </div>
+              ) : (
+                <div>
+                  <strong>No swatch yet</strong>
+                  <span>Tap the reference while Palette is open.</span>
+                </div>
+              )}
+              <button type="button" className="secondary-button" onClick={removeSelectedSwatch} disabled={!selectedSwatch}>
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {activeTool === 'filters' ? (
+          <div className="tool-panel-content">
+            <label className="toggle-row">
+              <span>Show original</span>
+              <input
+                type="checkbox"
+                checked={state.filters.showOriginal}
+                onChange={(event) => updateFilters({ showOriginal: event.target.checked })}
+              />
+            </label>
+
+            <label className="slider-row">
+              <span>Squint</span>
+              <input
+                type="range"
+                min="0"
+                max="12"
+                step="0.5"
+                value={state.filters.blur}
+                onChange={(event) => updateFilters({ blur: Number(event.target.value) })}
+              />
+              <strong>{state.filters.blur}px</strong>
+            </label>
+
+            <label className="slider-row">
+              <span>Exposure</span>
+              <input
+                type="range"
+                min="-60"
+                max="60"
+                step="1"
+                value={state.filters.exposure}
+                onChange={(event) => updateFilters({ exposure: Number(event.target.value) })}
+              />
+              <strong>{state.filters.exposure}</strong>
+            </label>
+
+            <label className="slider-row">
+              <span>Contrast</span>
+              <input
+                type="range"
+                min="-60"
+                max="80"
+                step="1"
+                value={state.filters.contrast}
+                onChange={(event) => updateFilters({ contrast: Number(event.target.value) })}
+              />
+              <strong>{state.filters.contrast}</strong>
+            </label>
+
+            <button type="button" className="secondary-button" onClick={resetFilters}>
+              Reset filters
+            </button>
+          </div>
+        ) : null}
+
+        {activeTool === 'view' ? (
+          <div className="tool-panel-content">
+            <label className="slider-row">
+              <span>Zoom</span>
+              <input
+                type="range"
+                min="0.2"
+                max="4"
+                step="0.05"
+                value={state.viewport.zoom}
+                onChange={(event) => updateViewport({ zoom: Number(event.target.value) })}
+              />
+              <strong>{Math.round(state.viewport.zoom * 100)}%</strong>
+            </label>
+
+            <div className="zoom-actions">
+              <button type="button" className="icon-button" title="Zoom out" onClick={() => stepZoom('out')}>
+                <Minus size={16} />
+              </button>
+              <button type="button" className="secondary-button" onClick={() => updateViewport({ zoom: 1, panX: 0, panY: 0 })}>
+                Fit
+              </button>
+              <button type="button" className="icon-button" title="Zoom in" onClick={() => stepZoom('in')}>
+                <Plus size={16} />
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <main className="workspace">
-      <header className="workspace-toolbar">
-        <div>
-          <p className="eyebrow">Edit</p>
-          <h2>{state.image?.title ?? 'Choose a reference'}</h2>
+    <main className="edit-screen">
+      <header className="edit-topbar">
+        <button type="button" className="top-icon-button" title="Back to library" onClick={onBack}>
+          <ArrowLeft size={20} />
+        </button>
+        <div className="edit-title">
+          <strong>{state.image?.title ?? 'Choose a reference'}</strong>
+          <span>
+            {canvasWidth} x {canvasHeight} {state.canvas.unit}
+          </span>
         </div>
         <button
-          className="primary-button"
+          type="button"
+          className="top-icon-button"
+          title="Export image"
           onClick={() => canvasRef.current && exportCanvas(canvasRef.current)}
           disabled={!state.image}
         >
-          <Download size={18} />
-          Export
+          <Download size={20} />
         </button>
       </header>
 
-      <CanvasStage ref={canvasRef} image={state.image} state={state} onViewportChange={setViewport} />
+      <div className="edit-canvas-wrap" onPointerDown={() => activeTool && activeTool !== 'palette' && closeTool()}>
+        {activeTool === 'palette' ? (
+          <div className="sampling-hint">
+            <Pipette size={15} />
+            <span>Tap image to sample</span>
+          </div>
+        ) : null}
+        <CanvasStage
+          ref={canvasRef}
+          image={state.image}
+          interactionMode={activeTool === 'palette' ? 'sample' : 'pan'}
+          state={state}
+          onSampleColor={addSwatch}
+          onViewportChange={setViewport}
+        />
+      </div>
 
-      <section className="tool-dock" aria-label="Editing tools">
-        <div className="tool-panel">
-          {activeTool === 'canvas' ? (
-            <div className="tool-panel-content">
-              <div className="tool-panel-heading">
-                <ImageIcon size={16} />
-                <span>Canvas size</span>
-              </div>
-
-              <label className="control-row">
-                <span>Preset</span>
-                <select value={state.canvas.presetId} onChange={(event) => selectPreset(event.target.value)}>
-                  <option value="custom">Custom</option>
-                  {canvasPresets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="segmented-control">
-                <button data-active={state.canvas.unit === 'cm'} onClick={() => setCanvasUnit('cm')}>
-                  cm
-                </button>
-                <button data-active={state.canvas.unit === 'in'} onClick={() => setCanvasUnit('in')}>
-                  in
-                </button>
-              </div>
-
-              <div className="dimension-row">
-                <label>
-                  <span>Width</span>
-                  <input
-                    type="number"
-                    min="0.1"
-                    step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
-                    value={canvasWidth}
-                    onChange={(event) => setCanvasDimension('widthCm', event.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>Height</span>
-                  <input
-                    type="number"
-                    min="0.1"
-                    step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
-                    value={canvasHeight}
-                    onChange={(event) => setCanvasDimension('heightCm', event.target.value)}
-                  />
-                </label>
-              </div>
-
-              <div className="segmented-control">
-                <button data-active={state.canvas.orientation === 'portrait'} onClick={() => setOrientation('portrait')}>
-                  Portrait
-                </button>
-                <button data-active={state.canvas.orientation === 'landscape'} onClick={() => setOrientation('landscape')}>
-                  Landscape
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {activeTool === 'grid' ? (
-            <div className="tool-panel-content">
-              <div className="tool-panel-heading">
-                <Grid2X2 size={16} />
-                <span>Grid scale</span>
-              </div>
-
-              <label className="toggle-row">
-                <span>Show grid</span>
-                <input
-                  type="checkbox"
-                  checked={state.grid.enabled}
-                  onChange={(event) => updateGrid({ enabled: event.target.checked })}
-                />
-              </label>
-
-              <div className="segmented-control">
-                <button data-active={state.grid.unit === 'cm'} onClick={() => setGridUnit('cm')}>
-                  cm
-                </button>
-                <button data-active={state.grid.unit === 'in'} onClick={() => setGridUnit('in')}>
-                  in
-                </button>
-              </div>
-
-              <label className="control-row">
-                <span>Square</span>
-                <input
-                  type="number"
-                  min={gridLimits.min}
-                  max={gridLimits.max}
-                  step={gridLimits.step}
-                  value={formatMeasurement(state.grid.squareSizeCm, state.grid.unit)}
-                  onChange={(event) => setGridSquareSize(event.target.value)}
-                />
-                <strong>{state.grid.unit}</strong>
-              </label>
-
-              <label className="slider-row">
-                <span>Square</span>
-                <input
-                  type="range"
-                  min={gridLimits.min}
-                  max={gridLimits.max}
-                  step={gridLimits.step}
-                  value={gridSquareSize}
-                  onChange={(event) => setGridSquareSize(event.target.value)}
-                />
-                <strong>
-                  {formatMeasurement(state.grid.squareSizeCm, state.grid.unit)}
-                  {' '}
-                  {state.grid.unit}
-                </strong>
-              </label>
-
-              <label className="slider-row">
-                <span>Opacity</span>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="1"
-                  step="0.05"
-                  value={state.grid.opacity}
-                  onChange={(event) => updateGrid({ opacity: Number(event.target.value) })}
-                />
-                <strong>{Math.round(state.grid.opacity * 100)}%</strong>
-              </label>
-
-              <label className="slider-row">
-                <span>Line</span>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="5"
-                  step="0.5"
-                  value={state.grid.lineWidth}
-                  onChange={(event) => updateGrid({ lineWidth: Number(event.target.value) })}
-                />
-                <strong>{state.grid.lineWidth}px</strong>
-              </label>
-
-              <label className="control-row">
-                <span>Color</span>
-                <input
-                  type="color"
-                  value={state.grid.color}
-                  onChange={(event) => updateGrid({ color: event.target.value })}
-                />
-              </label>
-            </div>
-          ) : null}
-
-          {activeTool === 'view' ? (
-            <div className="tool-panel-content">
-              <div className="tool-panel-heading">
-                <RotateCcw size={16} />
-                <span>View</span>
-              </div>
-
-              <label className="slider-row">
-                <span>Zoom</span>
-                <input
-                  type="range"
-                  min="0.2"
-                  max="4"
-                  step="0.05"
-                  value={state.viewport.zoom}
-                  onChange={(event) => updateViewport({ zoom: Number(event.target.value) })}
-                />
-                <strong>{Math.round(state.viewport.zoom * 100)}%</strong>
-              </label>
-
-              <div className="zoom-actions">
-                <button className="icon-button" title="Zoom out" onClick={() => stepZoom('out')} disabled={!state.image}>
-                  <Minus size={16} />
-                </button>
-                <button className="secondary-button" onClick={() => updateViewport({ zoom: 1, panX: 0, panY: 0 })}>
-                  Fit
-                </button>
-                <button className="icon-button" title="Zoom in" onClick={() => stepZoom('in')} disabled={!state.image}>
-                  <Plus size={16} />
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+      <section className="tool-dock" data-open={Boolean(activeTool)} aria-label="Editing tools">
+        {renderSheet()}
 
         <nav className="tool-strip" aria-label="Tool categories">
-          <button data-active={activeTool === 'canvas'} onClick={() => setActiveTool('canvas')}>
-            <Crop size={18} />
+          <button type="button" data-active={activeTool === 'canvas'} onClick={() => toggleTool('canvas')}>
+            <Crop size={19} />
             <span>Canvas</span>
           </button>
-          <button data-active={activeTool === 'grid'} onClick={() => setActiveTool('grid')}>
-            <Grid2X2 size={18} />
+          <button type="button" data-active={activeTool === 'grid'} onClick={() => toggleTool('grid')}>
+            <Grid2X2 size={19} />
             <span>Grid</span>
           </button>
-          <button data-active={activeTool === 'view'} onClick={() => setActiveTool('view')}>
-            <Move size={18} />
+          <button type="button" data-active={activeTool === 'palette'} onClick={() => toggleTool('palette')}>
+            <PaletteIcon size={19} />
+            <span>Palette</span>
+          </button>
+          <button type="button" data-active={activeTool === 'filters'} onClick={() => toggleTool('filters')}>
+            <SlidersHorizontal size={19} />
+            <span>Filters</span>
+          </button>
+          <button type="button" data-active={activeTool === 'view'} onClick={() => toggleTool('view')}>
+            <Move size={19} />
             <span>View</span>
           </button>
         </nav>
       </section>
     </main>
   );
+}
+
+function getToolLabel(tool: ActiveTool) {
+  switch (tool) {
+    case 'canvas':
+      return (
+        <>
+          <ImageIcon size={16} />
+          Canvas size
+        </>
+      );
+    case 'grid':
+      return (
+        <>
+          <Grid2X2 size={16} />
+          Grid scale
+        </>
+      );
+    case 'palette':
+      return (
+        <>
+          <Pipette size={16} />
+          Palette
+        </>
+      );
+    case 'filters':
+      return (
+        <>
+          <SlidersHorizontal size={16} />
+          Filters
+        </>
+      );
+    case 'view':
+      return (
+        <>
+          <RotateCcw size={16} />
+          View
+        </>
+      );
+  }
 }

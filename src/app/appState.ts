@@ -1,4 +1,5 @@
 import type { ReferenceImage } from '../library/referenceTypes';
+import type { PaletteSource, PaletteSwatch, SampleSize } from '../palette/paletteTypes';
 
 export type WorkspaceState = {
   image: ReferenceImage | null;
@@ -21,6 +22,18 @@ export type WorkspaceState = {
     color: string;
     opacity: number;
     lineWidth: number;
+  };
+  filters: {
+    blur: number;
+    exposure: number;
+    contrast: number;
+    showOriginal: boolean;
+  };
+  palette: {
+    source: PaletteSource;
+    sampleSize: SampleSize;
+    swatches: PaletteSwatch[];
+    selectedSwatchId: string | null;
   };
 };
 
@@ -45,5 +58,17 @@ export const initialWorkspaceState: WorkspaceState = {
     color: '#f8fafc',
     opacity: 0.7,
     lineWidth: 1,
+  },
+  filters: {
+    blur: 0,
+    exposure: 0,
+    contrast: 0,
+    showOriginal: false,
+  },
+  palette: {
+    source: 'filtered',
+    sampleSize: 3,
+    swatches: [],
+    selectedSwatchId: null,
   },
 };

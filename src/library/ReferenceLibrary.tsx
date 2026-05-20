@@ -1,4 +1,4 @@
-import { ImagePlus, Upload } from 'lucide-react';
+import { Bookmark, Grid2X2, Plus, Upload } from 'lucide-react';
 import type { ReferenceImage } from './referenceTypes';
 
 type ReferenceLibraryProps = {
@@ -31,14 +31,12 @@ export function ReferenceLibrary({
   }
 
   return (
-    <aside className="library-panel" aria-label="Reference library">
-      <div className="panel-heading">
-        <div>
-          <p className="eyebrow">Gallery</p>
-          <h1>Art Assistant</h1>
-        </div>
+    <main className="gallery-screen" aria-label="Reference library">
+      <header className="gallery-topbar">
+        <div className="brand-mark">AA</div>
+        <h1>Art Assistant</h1>
         <label className="icon-button" title="Upload image">
-          <Upload size={18} />
+          <Plus size={18} />
           <input
             type="file"
             accept="image/*"
@@ -46,42 +44,59 @@ export function ReferenceLibrary({
             onChange={(event) => handleUpload(event.target.files?.[0])}
           />
         </label>
-      </div>
+      </header>
 
-      <div className="upload-callout">
-        <ImagePlus size={18} />
-        <span>Bargue studies and your uploaded references.</span>
-      </div>
+      <section className="gallery-content">
+        <div className="gallery-filter-row">
+          <button type="button">
+            <span>Bargue Plates</span>
+            <span aria-hidden="true">⌄</span>
+          </button>
+          <span>{references.length} references</span>
+        </div>
 
-      <div className="library-section">
-        <div className="section-label">Bargue Plates</div>
-        <div className="reference-grid">
+        <div className="gallery-grid">
           {references.map((reference) => {
             const isSelected = selectedImage?.id === reference.id;
 
             return (
               <button
-                className="reference-card"
+                className="gallery-card"
                 data-selected={isSelected}
                 key={reference.id}
                 onClick={() => onSelectImage(reference)}
               >
                 <img src={reference.thumbnailSrc ?? reference.src} alt="" />
-                <span>{reference.title}</span>
+                <span>
+                  <strong>{reference.title}</strong>
+                  <small>{reference.rights}</small>
+                </span>
               </button>
             );
           })}
         </div>
-      </div>
+      </section>
 
-      {selectedImage ? (
-        <div className="reference-details">
-          <div className="section-label">Current Reference</div>
-          <strong>{selectedImage.title}</strong>
-          <span>{selectedImage.category}</span>
-          <span>{selectedImage.rights}</span>
-        </div>
-      ) : null}
-    </aside>
+      <nav className="gallery-bottom-nav" aria-label="Gallery sections">
+        <button type="button" data-active="true">
+          <Grid2X2 size={18} />
+          <span>Library</span>
+        </button>
+        <label>
+          <Upload size={18} />
+          <span>Upload</span>
+          <input
+            type="file"
+            accept="image/*"
+            className="visually-hidden"
+            onChange={(event) => handleUpload(event.target.files?.[0])}
+          />
+        </label>
+        <button type="button" disabled>
+          <Bookmark size={18} />
+          <span>Saved</span>
+        </button>
+      </nav>
+    </main>
   );
 }

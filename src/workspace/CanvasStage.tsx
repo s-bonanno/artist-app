@@ -1,17 +1,28 @@
 import { forwardRef, PointerEvent, useEffect, useImperativeHandle, useRef, useState, WheelEvent } from 'react';
+import type { WorkspaceState } from '../app/appState';
 import { drawSquareGrid } from '../grid/drawGrid';
 import type { ReferenceImage } from '../library/referenceTypes';
-import type { WorkspaceState } from '../app/appState';
+import { rgbToHex } from '../palette/colorUtils';
+import type { ColorSample, RgbColor } from '../palette/paletteTypes';
 import { getCanvasPixelSize } from './canvasSizing';
 
 type CanvasStageProps = {
   image: ReferenceImage | null;
+  interactionMode: 'pan' | 'sample';
   state: WorkspaceState;
+  onSampleColor: (sample: ColorSample) => void;
   onViewportChange: (viewport: WorkspaceState['viewport']) => void;
 };
 
+type ImageDrawRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
-  function CanvasStage({ image, state, onViewportChange }, forwardedRef) {
+  function CanvasStage({ image, interactionMode, state, onSampleColor, onViewportChange }, forwardedRef) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const loadedImageRef = useRef<HTMLImageElement | null>(null);
     const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
@@ -36,7 +47,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
     useEffect(() => {
       draw();
-    }, [state.canvas, state.grid, state.viewport]);
+    }, [state.canvas, state.filters, state.grid, state.viewport]);
 
     function draw() {
       const canvas = canvasRef.current;
@@ -49,20 +60,19 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       canvas.width = width;
       canvas.height = height;
 
-      ctx.fillStyle = '#262629';
+      ctx.fillStyle = '#111214';
       ctx.fillRect(0, 0, width, height);
 
       const loadedImage = loadedImageRef.current;
       if (loadedImage) {
-        const scale = Math.min(width / loadedImage.width, height / loadedImage.height) * state.viewport.zoom;
-        const drawWidth = loadedImage.width * scale;
-        const drawHeight = loadedImage.height * scale;
-        const x = (width - drawWidth) / 2 + state.viewport.panX;
-        const y = (height - drawHeight) / 2 + state.viewport.panY;
+        const imageRect = getImageDrawRect(width, height, loadedImage, state.viewport);
 
+        ctx.save();
+        ctx.filter = state.filters.showOriginal ? 'none' : getCanvasFilter(state.filters);
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(loadedImage, x, y, drawWidth, drawHeight);
+        ctx.drawImage(loadedImage, imageRect.x, imageRect.y, imageRect.width, imageRect.height);
+        ctx.restore();
       }
 
       drawSquareGrid(ctx, width, height, {
@@ -82,8 +92,55 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       };
     }
 
+    function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
+      const scale = getCanvasScale(event.currentTarget);
+      const rect = event.currentTarget.getBoundingClientRect();
+
+      return {
+        x: (event.clientX - rect.left) * scale.x,
+        y: (event.clientY - rect.top) * scale.y,
+      };
+    }
+
+    function handleSample(event: PointerEvent<HTMLCanvasElement>) {
+      const canvas = event.currentTarget;
+      const loadedImage = loadedImageRef.current;
+      if (!loadedImage) return;
+
+      const point = getCanvasPoint(event);
+      const imageRect = getImageDrawRect(canvas.width, canvas.height, loadedImage, state.viewport);
+      const isInsideImage =
+        point.x >= imageRect.x &&
+        point.x <= imageRect.x + imageRect.width &&
+        point.y >= imageRect.y &&
+        point.y <= imageRect.y + imageRect.height;
+
+      if (!isInsideImage) return;
+
+      const imageX = ((point.x - imageRect.x) / imageRect.width) * loadedImage.naturalWidth;
+      const imageY = ((point.y - imageRect.y) / imageRect.height) * loadedImage.naturalHeight;
+      const rgb = sampleImageColor(loadedImage, imageX, imageY, state);
+
+      onSampleColor({
+        hex: rgbToHex(rgb),
+        rgb,
+        source: state.palette.source,
+        sampleSize: state.palette.sampleSize,
+        imagePoint: {
+          x: Math.round(imageX),
+          y: Math.round(imageY),
+        },
+      });
+    }
+
     function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
       if (!image) return;
+
+      if (interactionMode === 'sample') {
+        event.preventDefault();
+        handleSample(event);
+        return;
+      }
 
       event.currentTarget.setPointerCapture(event.pointerId);
       lastPointerRef.current = {
@@ -94,7 +151,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
-      if (!isPanning || !lastPointerRef.current) return;
+      if (!isPanning || !lastPointerRef.current || interactionMode !== 'pan') return;
 
       const scale = getCanvasScale(event.currentTarget);
       const deltaX = (event.clientX - lastPointerRef.current.x) * scale.x;
@@ -151,6 +208,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
           ref={canvasRef}
           aria-label="Reference workspace canvas"
           data-panning={isPanning}
+          data-sampling={interactionMode === 'sample'}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={endPan}
@@ -161,3 +219,74 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     );
   },
 );
+
+function getImageDrawRect(
+  width: number,
+  height: number,
+  image: HTMLImageElement,
+  viewport: WorkspaceState['viewport'],
+): ImageDrawRect {
+  const scale = Math.min(width / image.width, height / image.height) * viewport.zoom;
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+
+  return {
+    x: (width - drawWidth) / 2 + viewport.panX,
+    y: (height - drawHeight) / 2 + viewport.panY,
+    width: drawWidth,
+    height: drawHeight,
+  };
+}
+
+function getCanvasFilter(filters: WorkspaceState['filters']) {
+  const blur = Math.max(0, filters.blur);
+  const brightness = Math.max(0, 100 + filters.exposure);
+  const contrast = Math.max(0, 100 + filters.contrast);
+
+  return `blur(${blur}px) brightness(${brightness}%) contrast(${contrast}%)`;
+}
+
+function sampleImageColor(
+  image: HTMLImageElement,
+  imageX: number,
+  imageY: number,
+  state: WorkspaceState,
+): RgbColor {
+  const sampleSize = state.palette.sampleSize;
+  const halfSample = Math.floor(sampleSize / 2);
+  const sourceX = clamp(Math.round(imageX) - halfSample, 0, image.naturalWidth - sampleSize);
+  const sourceY = clamp(Math.round(imageY) - halfSample, 0, image.naturalHeight - sampleSize);
+  const sampleCanvas = document.createElement('canvas');
+  const sampleContext = sampleCanvas.getContext('2d', { willReadFrequently: true });
+
+  sampleCanvas.width = sampleSize;
+  sampleCanvas.height = sampleSize;
+
+  if (!sampleContext) return [0, 0, 0];
+
+  if (state.palette.source === 'filtered' && !state.filters.showOriginal) {
+    sampleContext.filter = getCanvasFilter(state.filters);
+  }
+
+  sampleContext.drawImage(image, sourceX, sourceY, sampleSize, sampleSize, 0, 0, sampleSize, sampleSize);
+
+  const { data } = sampleContext.getImageData(0, 0, sampleSize, sampleSize);
+  const channels = [0, 0, 0];
+  const pixelCount = data.length / 4;
+
+  for (let index = 0; index < data.length; index += 4) {
+    channels[0] += data[index];
+    channels[1] += data[index + 1];
+    channels[2] += data[index + 2];
+  }
+
+  return [
+    Math.round(channels[0] / pixelCount),
+    Math.round(channels[1] / pixelCount),
+    Math.round(channels[2] / pixelCount),
+  ];
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
