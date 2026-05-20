@@ -20,6 +20,7 @@ The rebuilt app should have three major areas:
    - Pan, zoom, fit, crop, and inspect the image.
    - Add grids and guide overlays.
    - Apply study filters.
+   - Sample colors from the reference and build a swatch set for paint mixing.
    - Export the configured reference image.
 
 3. Saved Studies
@@ -55,6 +56,8 @@ Phase 1 should deliver a useful local app with a built-in reference library and 
 - Basic light controls: exposure and contrast.
 - Simple category filtering in the library.
 - Source/credit display for each built-in reference.
+- Palette tool for sampling colors from the reference.
+- Swatch set display with sampled colors.
 
 ### Not Phase 1
 
@@ -66,6 +69,7 @@ Phase 1 should deliver a useful local app with a built-in reference library and 
 - Large reference catalog management UI.
 - Advanced search.
 - AI image analysis.
+- Advanced paint mixing recipes.
 
 ## Reference Library Design
 
@@ -166,6 +170,11 @@ src/
     blurFilter.ts
     lightFilter.ts
 
+  palette/
+    paletteTypes.ts
+    sampleColor.ts
+    SwatchStrip.tsx
+
   export/
     exportCanvas.ts
 
@@ -204,6 +213,17 @@ type WorkspaceState = {
     exposure: number;
     contrast: number;
   };
+  palette: {
+    swatches: Array<{
+      id: string;
+      name?: string;
+      hex: string;
+      rgb: [number, number, number];
+      source: "original" | "filtered";
+      sampleSize: 1 | 3 | 5;
+      imagePoint: { x: number; y: number };
+    }>;
+  };
 };
 ```
 
@@ -215,25 +235,35 @@ The app should feel like a focused studio tool, not a landing page.
 
 First screen:
 
-- Left or bottom library panel.
-- Central canvas workspace.
-- Right or bottom controls panel.
-- Top toolbar for image actions and export.
+- Gallery view for built-in references and uploads.
+- Lightroom-style thumbnail grid.
+- Minimal top bar.
+- Bottom navigation for Library, Upload, and later Saved.
+
+Edit screen:
+
+- Black canvas-first workspace.
+- Minimal top bar for back/title/export.
+- Bottom tool strip for Canvas, Grid, Palette, Filters, View, and Export.
+- One temporary tool sheet open at a time.
+- Controls slide up from the bottom and dismiss cleanly.
 
 On desktop:
 
-- Library can be a left sidebar.
-- Canvas occupies the center.
-- Controls can sit on the right.
+- Gallery may become a collapsible rail or drawer.
+- Canvas still owns the center.
+- Controls should stay focused and temporary rather than becoming a permanent heavy sidebar.
 
 On tablet/mobile:
 
 - Canvas remains primary.
-- Library and controls become bottom sheets or tabs.
+- Gallery is its own screen.
+- Controls become bottom sheets.
 
 Key UI tabs:
 
 - Library
+- Palette
 - Grid
 - Canvas
 - Filters
@@ -251,10 +281,12 @@ Key UI tabs:
 8. Implement square grid overlay.
 9. Add grid controls.
 10. Add export.
-11. Add blur/squint filter.
-12. Add basic light controls.
-13. Add responsive tablet/mobile layout.
-14. QA against the old app's core workflows.
+11. Add Palette tool shell and swatch state.
+12. Add color sampling from the image/canvas.
+13. Add blur/squint filter.
+14. Add basic light controls.
+15. Add responsive tablet/mobile layout.
+16. QA against the old app's core workflows.
 
 ## Migration From Current App
 
@@ -297,6 +329,6 @@ Phase 1 is complete when an artist can:
 4. Adjust canvas/grid settings.
 5. Pan and zoom the image.
 6. Apply at least one study filter.
-7. Export the final reference image.
-8. Upload their own image and use the same workflow.
-
+7. Sample colors from the reference and build a simple swatch set.
+8. Export the final reference image.
+9. Upload their own image and use the same workflow.
