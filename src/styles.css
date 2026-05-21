@@ -73,7 +73,7 @@ select:focus-visible {
   justify-content: center;
   gap: 8px;
   min-height: 38px;
-  border-radius: 5px;
+  border-radius: 3px;
   color: #f5f5f7;
   background: rgb(255 255 255 / 0.07);
   cursor: pointer;
@@ -104,7 +104,7 @@ select:focus-visible {
   padding: 0 12px;
   border: 1px solid rgb(255 255 255 / 0.08);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .icon-button:not(:disabled):hover,
@@ -144,18 +144,18 @@ button:disabled,
   width: 26px;
   height: 26px;
   border: 1px solid rgb(122 183 255 / 0.42);
-  border-radius: 4px;
+  border-radius: 2px;
   color: #7ab7ff;
   background: rgb(122 183 255 / 0.12);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .gallery-topbar h1 {
   margin: 0;
   overflow: hidden;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1;
   text-align: center;
   text-overflow: ellipsis;
@@ -181,7 +181,7 @@ button:disabled,
   min-height: 172px;
   padding: 22px;
   border: 1px solid rgb(255 255 255 / 0.1);
-  border-radius: 5px;
+  border-radius: 3px;
   color: #f5f5f7;
   background:
     linear-gradient(135deg, rgb(122 183 255 / 0.08), rgb(255 255 255 / 0.03)),
@@ -194,8 +194,8 @@ button:disabled,
 }
 
 .upload-hero strong {
-  font-size: 19px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 400;
   letter-spacing: 0;
 }
 
@@ -214,12 +214,12 @@ button:disabled,
   min-height: 34px;
   margin-top: 4px;
   padding: 0 12px;
-  border-radius: 4px;
+  border-radius: 2px;
   color: #101010;
   background: #f5f5f7;
   font-size: 12px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .suggested-section {
@@ -243,7 +243,7 @@ button:disabled,
 .gallery-section-heading strong {
   color: #f5f5f7;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .gallery-section-heading span {
@@ -257,12 +257,12 @@ button:disabled,
   flex: 0 0 auto;
   min-height: 32px;
   padding: 0 10px;
-  border-radius: 4px;
+  border-radius: 2px;
   color: #7ab7ff;
   background: rgb(122 183 255 / 0.1);
   cursor: pointer;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .gallery-filter-row {
@@ -286,7 +286,7 @@ button:disabled,
   background: transparent;
   cursor: pointer;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .gallery-grid {
@@ -310,11 +310,11 @@ button:disabled,
 }
 
 .suggested-strip .gallery-card {
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .suggested-strip .gallery-card img {
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .gallery-card {
@@ -375,7 +375,7 @@ button:disabled,
 
 .gallery-card strong {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .gallery-card small {
@@ -400,7 +400,7 @@ button:disabled,
   gap: 3px;
   min-width: 0;
   min-height: 52px;
-  border-radius: 4px;
+  border-radius: 2px;
   color: #a1a1a6;
   background: transparent;
   cursor: pointer;
@@ -433,7 +433,7 @@ button:disabled,
 .saved-empty-state strong {
   color: #f5f5f7;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .saved-empty-state span {
@@ -481,7 +481,7 @@ button:disabled,
 
 .edit-title strong {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .edit-title span {
@@ -573,7 +573,7 @@ button:disabled,
   width: min(100%, 620px);
   border: 1px solid rgb(255 255 255 / 0.08);
   border-bottom: 0;
-  border-radius: 6px 6px 0 0;
+  border-radius: 3px 3px 0 0;
   background: rgb(29 29 31 / 0.96);
   box-shadow: 0 -20px 60px rgb(0 0 0 / 0.45);
   backdrop-filter: blur(20px);
@@ -609,7 +609,7 @@ button:disabled,
   min-width: 0;
   color: #f5f5f7;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .tool-panel-content {
@@ -634,7 +634,7 @@ button:disabled,
   overflow: hidden;
   color: #a1a1a6;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -647,7 +647,7 @@ button:disabled,
   min-height: 34px;
   color: #f5f5f7;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .toggle-row input[type="checkbox"] {
@@ -720,7 +720,7 @@ input[type="number"] {
   width: 100%;
   min-height: 36px;
   border: 1px solid rgb(255 255 255 / 0.1);
-  border-radius: 4px;
+  border-radius: 2px;
   padding: 0 10px;
   color: #f5f5f7;
   background: rgb(255 255 255 / 0.07);
@@ -737,17 +737,17 @@ input[type="number"] {
 
 .measurement-field input[type="number"] {
   border-right: 0;
-  border-radius: 4px 0 0 4px;
+  border-radius: 2px 0 0 2px;
 }
 
 .measurement-field select {
   width: 58px;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 2px 2px 0;
   padding: 0 7px;
   color: #f5f5f7;
   background: rgb(255 255 255 / 0.1);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 input[type="color"] {
@@ -755,7 +755,7 @@ input[type="color"] {
   height: 28px;
   padding: 0;
   border: 1px solid rgb(255 255 255 / 0.16);
-  border-radius: 4px;
+  border-radius: 2px;
   background: transparent;
 }
 
@@ -822,12 +822,12 @@ input[type="range"]::-moz-range-thumb {
   min-width: 0;
   min-height: 42px;
   border: 1px solid rgb(255 255 255 / 0.09);
-  border-radius: 5px;
+  border-radius: 3px;
   color: #a1a1a6;
   background: rgb(255 255 255 / 0.045);
   cursor: pointer;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   transition:
     background-color 160ms ease,
     border-color 160ms ease,
@@ -853,12 +853,12 @@ input[type="range"]::-moz-range-thumb {
   min-height: 30px;
   padding: 0 10px;
   border: 1px solid rgb(255 255 255 / 0.09);
-  border-radius: 4px;
+  border-radius: 2px;
   color: #a1a1a6;
   background: rgb(255 255 255 / 0.035);
   cursor: pointer;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   transition:
     border-color 160ms ease,
     background-color 160ms ease,
@@ -924,7 +924,7 @@ input[type="range"]::-moz-range-thumb {
   min-width: 0;
   padding: 10px;
   border: 1px solid rgb(255 255 255 / 0.08);
-  border-radius: 5px;
+  border-radius: 3px;
   background: rgb(255 255 255 / 0.045);
 }
 
@@ -932,7 +932,7 @@ input[type="range"]::-moz-range-thumb {
   width: 42px;
   height: 42px;
   border: 1px solid rgb(255 255 255 / 0.18);
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .selected-swatch div:nth-child(2) {
@@ -951,7 +951,7 @@ input[type="range"]::-moz-range-thumb {
 .selected-swatch strong {
   color: #f5f5f7;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .selected-swatch span {
@@ -976,7 +976,7 @@ input[type="range"]::-moz-range-thumb {
   gap: 3px;
   min-width: 0;
   min-height: 56px;
-  border-radius: 5px;
+  border-radius: 3px;
   color: #a1a1a6;
   background: transparent;
   cursor: pointer;
@@ -1006,7 +1006,7 @@ input[type="range"]::-moz-range-thumb {
     width: min(100%, 480px);
     border: 1px solid rgb(255 255 255 / 0.08);
     border-bottom: 0;
-    border-radius: 6px 6px 0 0;
+    border-radius: 3px 3px 0 0;
   }
 
   .edit-topbar {
@@ -1029,7 +1029,7 @@ input[type="range"]::-moz-range-thumb {
   .tool-strip {
     border-right: 1px solid rgb(255 255 255 / 0.08);
     border-left: 1px solid rgb(255 255 255 / 0.08);
-    border-radius: 6px 6px 0 0;
+    border-radius: 3px 3px 0 0;
   }
 }
 
