@@ -582,9 +582,9 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
           <ArrowLeft size={20} />
         </button>
         <div className="edit-title">
-          <strong>{state.image?.title ?? 'Choose a reference'}</strong>
+          <strong>Workspace</strong>
           <span>
-            {canvasWidth} x {canvasHeight} {state.canvas.unit}
+            {state.image?.title ?? 'Choose a reference'} · {canvasWidth} x {canvasHeight} {state.canvas.unit}
           </span>
         </div>
         <button
