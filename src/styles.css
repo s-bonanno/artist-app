@@ -41,11 +41,14 @@ label {
   -webkit-tap-highlight-color: transparent;
 }
 
+button:focus,
+input:focus,
+select:focus,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid #7ab7ff;
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: none;
 }
 
 .app-shell {
@@ -580,6 +583,7 @@ button:disabled,
   animation: sheet-in 180ms ease-out;
   transition:
     background-color 180ms ease,
+    backdrop-filter 180ms ease,
     border-color 180ms ease,
     box-shadow 180ms ease;
 }
@@ -997,6 +1001,13 @@ input[type="range"]::-moz-range-thumb {
   border-color: transparent;
   background: rgb(29 29 31 / 0);
   box-shadow: none;
+  backdrop-filter: none;
+}
+
+.tool-dock[data-sliding="true"] .tool-strip {
+  border-color: transparent;
+  background: rgb(29 29 31 / 0);
+  backdrop-filter: none;
 }
 
 .tool-dock[data-sliding="true"] .tool-sheet-heading,
