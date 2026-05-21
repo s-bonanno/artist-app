@@ -16,7 +16,7 @@ import {
   X,
   ZoomIn,
 } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { WorkspaceState } from '../app/appState';
 import { exportCanvas } from '../export/exportCanvas';
 import { rgbToHsl } from '../palette/colorUtils';
@@ -50,6 +50,7 @@ const valueModes: Array<{ id: ValueMode; label: string }> = [
 export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
+  const [activeSlider, setActiveSlider] = useState<string | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
     [state.canvas.heightCm, state.canvas.widthCm, state.grid.unit],
@@ -65,11 +66,55 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   const selectedHsl = selectedSwatch ? rgbToHsl(selectedSwatch.rgb) : null;
 
   function closeTool() {
+    setActiveSlider(null);
     setActiveTool(null);
   }
 
   function toggleTool(tool: ActiveTool) {
+    setActiveSlider(null);
     setActiveTool((currentTool) => (currentTool === tool ? null : tool));
+  }
+
+  function startSliderInteraction(sliderId: string, pointerId?: number, target?: HTMLInputElement) {
+    if (pointerId !== undefined && target?.setPointerCapture) {
+      try {
+        target.setPointerCapture(pointerId);
+      } catch {
+        // Some browsers do not allow capture on native range controls.
+      }
+    }
+
+    setActiveSlider(sliderId);
+  }
+
+  function endSliderInteraction(pointerId?: number, target?: HTMLInputElement) {
+    if (pointerId !== undefined && target?.hasPointerCapture?.(pointerId)) {
+      try {
+        target.releasePointerCapture(pointerId);
+      } catch {
+        // Capture may already be released by the browser.
+      }
+    }
+
+    setActiveSlider(null);
+  }
+
+  function getSliderProps(sliderId: string) {
+    return {
+      onPointerDown: (event: PointerEvent<HTMLInputElement>) =>
+        startSliderInteraction(sliderId, event.pointerId, event.currentTarget),
+      onPointerUp: (event: PointerEvent<HTMLInputElement>) =>
+        endSliderInteraction(event.pointerId, event.currentTarget),
+      onPointerCancel: (event: PointerEvent<HTMLInputElement>) =>
+        endSliderInteraction(event.pointerId, event.currentTarget),
+      onBlur: () => endSliderInteraction(),
+      onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+          setActiveSlider(sliderId);
+        }
+      },
+      onKeyUp: () => endSliderInteraction(),
+    };
   }
 
   function updateCanvas(nextCanvas: Partial<WorkspaceState['canvas']>) {
@@ -393,7 +438,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               </div>
             </label>
 
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'grid-scale'}>
               <span>Scale</span>
               <input
                 type="range"
@@ -402,13 +447,14 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step={gridLimits.step}
                 value={gridSquareSize}
                 onChange={(event) => setGridSquareSize(event.target.value)}
+                {...getSliderProps('grid-scale')}
               />
               <strong>
                 {formatMeasurement(state.grid.squareSizeCm, state.grid.unit)} {state.grid.unit}
               </strong>
             </label>
 
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'grid-opacity'}>
               <span>Opacity</span>
               <input
                 type="range"
@@ -417,11 +463,12 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step="0.05"
                 value={state.grid.opacity}
                 onChange={(event) => updateGrid({ opacity: Number(event.target.value) })}
+                {...getSliderProps('grid-opacity')}
               />
               <strong>{Math.round(state.grid.opacity * 100)}%</strong>
             </label>
 
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'grid-line'}>
               <span>Line</span>
               <input
                 type="range"
@@ -430,6 +477,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step="0.5"
                 value={state.grid.lineWidth}
                 onChange={(event) => updateGrid({ lineWidth: Number(event.target.value) })}
+                {...getSliderProps('grid-line')}
               />
               <strong>{state.grid.lineWidth}px</strong>
             </label>
@@ -472,7 +520,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               </div>
             </div>
 
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'values-levels'}>
               <span>Levels</span>
               <input
                 type="range"
@@ -481,11 +529,12 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step="1"
                 value={state.values.levels}
                 onChange={(event) => updateValues({ enabled: true, levels: Number(event.target.value) })}
+                {...getSliderProps('values-levels')}
               />
               <strong>{state.values.levels}</strong>
             </label>
 
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'values-visible'}>
               <span>Visible</span>
               <input
                 type="range"
@@ -494,6 +543,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step="1"
                 value={state.values.visibleLevels}
                 onChange={(event) => updateValues({ enabled: true, visibleLevels: Number(event.target.value) })}
+                {...getSliderProps('values-visible')}
               />
               <strong>
                 {state.values.visibleLevels === 0
@@ -502,7 +552,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               </strong>
             </label>
 
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'values-opacity'}>
               <span>Opacity</span>
               <input
                 type="range"
@@ -511,6 +561,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step="0.05"
                 value={state.values.opacity}
                 onChange={(event) => updateValues({ enabled: true, opacity: Number(event.target.value) })}
+                {...getSliderProps('values-opacity')}
               />
               <strong>{Math.round(state.values.opacity * 100)}%</strong>
             </label>
@@ -610,7 +661,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               />
             </label>
 
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'filters-squint'}>
               <span>Squint</span>
               <input
                 type="range"
@@ -619,11 +670,12 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step="0.5"
                 value={state.filters.blur}
                 onChange={(event) => updateFilters({ blur: Number(event.target.value) })}
+                {...getSliderProps('filters-squint')}
               />
               <strong>{state.filters.blur}px</strong>
             </label>
 
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'filters-exposure'}>
               <span>Exposure</span>
               <input
                 type="range"
@@ -632,11 +684,12 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step="1"
                 value={state.filters.exposure}
                 onChange={(event) => updateFilters({ exposure: Number(event.target.value) })}
+                {...getSliderProps('filters-exposure')}
               />
               <strong>{state.filters.exposure}</strong>
             </label>
 
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'filters-contrast'}>
               <span>Contrast</span>
               <input
                 type="range"
@@ -645,6 +698,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step="1"
                 value={state.filters.contrast}
                 onChange={(event) => updateFilters({ contrast: Number(event.target.value) })}
+                {...getSliderProps('filters-contrast')}
               />
               <strong>{state.filters.contrast}</strong>
             </label>
@@ -657,7 +711,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
         {activeTool === 'zoom' ? (
           <div className="tool-panel-content">
-            <label className="slider-row">
+            <label className="slider-row" data-active-slider={activeSlider === 'zoom'}>
               <span>Zoom</span>
               <input
                 type="range"
@@ -666,6 +720,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 step="0.05"
                 value={state.viewport.zoom}
                 onChange={(event) => updateViewport({ zoom: Number(event.target.value) })}
+                {...getSliderProps('zoom')}
               />
               <strong>{Math.round(state.viewport.zoom * 100)}%</strong>
             </label>
@@ -730,7 +785,12 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
         />
       </div>
 
-      <section className="tool-dock" data-open={Boolean(activeTool)} aria-label="Editing tools">
+      <section
+        className="tool-dock"
+        data-open={Boolean(activeTool)}
+        data-sliding={Boolean(activeSlider)}
+        aria-label="Editing tools"
+      >
         {renderSheet()}
 
         <nav className="tool-strip" aria-label="Tool categories">
