@@ -8,7 +8,7 @@ import { getCanvasPixelSize } from './canvasSizing';
 
 type CanvasStageProps = {
   image: ReferenceImage | null;
-  interactionMode: 'pan' | 'sample';
+  interactionMode: 'locked' | 'pan' | 'sample';
   state: WorkspaceState;
   onSampleColor: (sample: ColorSample) => void;
   onViewportChange: (viewport: WorkspaceState['viewport']) => void;
@@ -142,6 +142,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         return;
       }
 
+      if (interactionMode !== 'pan') return;
+
       event.currentTarget.setPointerCapture(event.pointerId);
       lastPointerRef.current = {
         x: event.clientX,
@@ -179,7 +181,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function handleWheel(event: WheelEvent<HTMLCanvasElement>) {
-      if (!image) return;
+      if (!image || interactionMode !== 'pan') return;
 
       event.preventDefault();
 
@@ -207,6 +209,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         <canvas
           ref={canvasRef}
           aria-label="Reference workspace canvas"
+          data-locked={interactionMode === 'locked'}
           data-panning={isPanning}
           data-sampling={interactionMode === 'sample'}
           onPointerDown={handlePointerDown}

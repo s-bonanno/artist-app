@@ -399,6 +399,10 @@ button:disabled,
   cursor: grabbing;
 }
 
+.canvas-stage canvas[data-locked="true"] {
+  cursor: default;
+}
+
 .canvas-stage canvas[data-sampling="true"] {
   cursor: crosshair;
 }

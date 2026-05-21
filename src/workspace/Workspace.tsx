@@ -6,15 +6,14 @@ import {
   Grid2X2,
   Image as ImageIcon,
   Minus,
-  Move,
   Palette as PaletteIcon,
   Pipette,
   Plus,
   RectangleHorizontal,
   RectangleVertical,
-  RotateCcw,
   SlidersHorizontal,
   X,
+  ZoomIn,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { WorkspaceState } from '../app/appState';
@@ -37,7 +36,7 @@ type WorkspaceProps = {
   onChange: (nextState: WorkspaceState) => void;
 };
 
-type ActiveTool = 'canvas' | 'grid' | 'palette' | 'filters' | 'view';
+type ActiveTool = 'canvas' | 'zoom' | 'grid' | 'palette' | 'filters';
 
 const sampleSizes: SampleSize[] = [1, 3, 5];
 
@@ -544,7 +543,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
           </div>
         ) : null}
 
-        {activeTool === 'view' ? (
+        {activeTool === 'zoom' ? (
           <div className="tool-panel-content">
             <label className="slider-row">
               <span>Zoom</span>
@@ -599,7 +598,10 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
         </button>
       </header>
 
-      <div className="edit-canvas-wrap" onPointerDown={() => activeTool && activeTool !== 'palette' && closeTool()}>
+      <div
+        className="edit-canvas-wrap"
+        onPointerDown={() => activeTool && activeTool !== 'palette' && activeTool !== 'zoom' && closeTool()}
+      >
         {activeTool === 'palette' ? (
           <div className="sampling-hint">
             <Pipette size={15} />
@@ -609,7 +611,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
         <CanvasStage
           ref={canvasRef}
           image={state.image}
-          interactionMode={activeTool === 'palette' ? 'sample' : 'pan'}
+          interactionMode={activeTool === 'palette' ? 'sample' : activeTool === 'zoom' ? 'pan' : 'locked'}
           state={state}
           onSampleColor={addSwatch}
           onViewportChange={setViewport}
@@ -624,6 +626,10 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
             <Crop size={19} />
             <span>Canvas</span>
           </button>
+          <button type="button" data-active={activeTool === 'zoom'} onClick={() => toggleTool('zoom')}>
+            <ZoomIn size={19} />
+            <span>Zoom</span>
+          </button>
           <button type="button" data-active={activeTool === 'grid'} onClick={() => toggleTool('grid')}>
             <Grid2X2 size={19} />
             <span>Grid</span>
@@ -635,10 +641,6 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
           <button type="button" data-active={activeTool === 'filters'} onClick={() => toggleTool('filters')}>
             <SlidersHorizontal size={19} />
             <span>Filters</span>
-          </button>
-          <button type="button" data-active={activeTool === 'view'} onClick={() => toggleTool('view')}>
-            <Move size={19} />
-            <span>View</span>
           </button>
         </nav>
       </section>
@@ -676,11 +678,11 @@ function getToolLabel(tool: ActiveTool) {
           Filters
         </>
       );
-    case 'view':
+    case 'zoom':
       return (
         <>
-          <RotateCcw size={16} />
-          View
+          <ZoomIn size={16} />
+          Zoom
         </>
       );
   }
