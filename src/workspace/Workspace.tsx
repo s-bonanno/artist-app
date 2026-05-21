@@ -3,7 +3,6 @@ import {
   Check,
   Crop,
   Download,
-  Eye,
   Grid2X2,
   Image as ImageIcon,
   Minus,
@@ -11,6 +10,8 @@ import {
   Palette as PaletteIcon,
   Pipette,
   Plus,
+  RectangleHorizontal,
+  RectangleVertical,
   RotateCcw,
   SlidersHorizontal,
   X,
@@ -257,45 +258,69 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               </select>
             </label>
 
-            <div className="segmented-control" aria-label="Canvas units">
-              <button type="button" data-active={state.canvas.unit === 'cm'} onClick={() => setCanvasUnit('cm')}>
-                cm
-              </button>
-              <button type="button" data-active={state.canvas.unit === 'in'} onClick={() => setCanvasUnit('in')}>
-                in
-              </button>
-            </div>
-
             <div className="dimension-row">
               <label>
                 <span>Width</span>
-                <input
-                  type="number"
-                  min="0.1"
-                  step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
-                  value={canvasWidth}
-                  onChange={(event) => setCanvasDimension('widthCm', event.target.value)}
-                />
+                <div className="measurement-field">
+                  <input
+                    type="number"
+                    min="0.1"
+                    step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
+                    value={canvasWidth}
+                    onChange={(event) => setCanvasDimension('widthCm', event.target.value)}
+                  />
+                  <select
+                    aria-label="Canvas width unit"
+                    value={state.canvas.unit}
+                    onChange={(event) => setCanvasUnit(event.target.value as MeasurementUnit)}
+                  >
+                    <option value="cm">cm</option>
+                    <option value="in">in</option>
+                  </select>
+                </div>
               </label>
               <label>
                 <span>Height</span>
-                <input
-                  type="number"
-                  min="0.1"
-                  step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
-                  value={canvasHeight}
-                  onChange={(event) => setCanvasDimension('heightCm', event.target.value)}
-                />
+                <div className="measurement-field">
+                  <input
+                    type="number"
+                    min="0.1"
+                    step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
+                    value={canvasHeight}
+                    onChange={(event) => setCanvasDimension('heightCm', event.target.value)}
+                  />
+                  <select
+                    aria-label="Canvas height unit"
+                    value={state.canvas.unit}
+                    onChange={(event) => setCanvasUnit(event.target.value as MeasurementUnit)}
+                  >
+                    <option value="cm">cm</option>
+                    <option value="in">in</option>
+                  </select>
+                </div>
               </label>
             </div>
 
-            <div className="segmented-control" aria-label="Canvas orientation">
-              <button type="button" data-active={state.canvas.orientation === 'portrait'} onClick={() => setOrientation('portrait')}>
-                Portrait
-              </button>
-              <button type="button" data-active={state.canvas.orientation === 'landscape'} onClick={() => setOrientation('landscape')}>
-                Landscape
-              </button>
+            <div className="option-block">
+              <span>Orientation</span>
+              <div className="icon-option-group" aria-label="Canvas orientation">
+                <button
+                  type="button"
+                  data-active={state.canvas.orientation === 'portrait'}
+                  onClick={() => setOrientation('portrait')}
+                >
+                  <RectangleVertical size={18} />
+                  <span>Portrait</span>
+                </button>
+                <button
+                  type="button"
+                  data-active={state.canvas.orientation === 'landscape'}
+                  onClick={() => setOrientation('landscape')}
+                >
+                  <RectangleHorizontal size={18} />
+                  <span>Landscape</span>
+                </button>
+              </div>
             </div>
           </div>
         ) : null}
@@ -311,26 +336,26 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               />
             </label>
 
-            <div className="segmented-control" aria-label="Grid units">
-              <button type="button" data-active={state.grid.unit === 'cm'} onClick={() => setGridUnit('cm')}>
-                cm
-              </button>
-              <button type="button" data-active={state.grid.unit === 'in'} onClick={() => setGridUnit('in')}>
-                in
-              </button>
-            </div>
-
             <label className="control-row">
               <span>Square</span>
-              <input
-                type="number"
-                min={gridLimits.min}
-                max={gridLimits.max}
-                step={gridLimits.step}
-                value={formatMeasurement(state.grid.squareSizeCm, state.grid.unit)}
-                onChange={(event) => setGridSquareSize(event.target.value)}
-              />
-              <strong>{state.grid.unit}</strong>
+              <div className="measurement-field">
+                <input
+                  type="number"
+                  min={gridLimits.min}
+                  max={gridLimits.max}
+                  step={gridLimits.step}
+                  value={formatMeasurement(state.grid.squareSizeCm, state.grid.unit)}
+                  onChange={(event) => setGridSquareSize(event.target.value)}
+                />
+                <select
+                  aria-label="Grid square unit"
+                  value={state.grid.unit}
+                  onChange={(event) => setGridUnit(event.target.value as MeasurementUnit)}
+                >
+                  <option value="cm">cm</option>
+                  <option value="in">in</option>
+                </select>
+              </div>
             </label>
 
             <label className="slider-row">
@@ -387,7 +412,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
         {activeTool === 'palette' ? (
           <div className="tool-panel-content">
-            <div className="segmented-control" aria-label="Palette sample source">
+            <div className="chip-control" aria-label="Palette sample source">
               <button
                 type="button"
                 data-active={state.palette.source === 'filtered'}
@@ -404,7 +429,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               </button>
             </div>
 
-            <div className="segmented-control" data-options="3" aria-label="Palette sample size">
+            <div className="chip-control" data-options="3" aria-label="Palette sample size">
               {sampleSizes.map((sampleSize) => (
                 <button
                   key={sampleSize}
