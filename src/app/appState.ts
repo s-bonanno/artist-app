@@ -1,5 +1,6 @@
 import type { ReferenceImage } from '../library/referenceTypes';
 import type { PaletteSource, PaletteSwatch, SampleSize } from '../palette/paletteTypes';
+import type { ValueSettings } from '../values/valueTypes';
 
 export type WorkspaceState = {
   image: ReferenceImage | null;
@@ -29,6 +30,7 @@ export type WorkspaceState = {
     contrast: number;
     showOriginal: boolean;
   };
+  values: ValueSettings;
   palette: {
     source: PaletteSource;
     sampleSize: SampleSize;
@@ -64,6 +66,13 @@ export const initialWorkspaceState: WorkspaceState = {
     exposure: 0,
     contrast: 0,
     showOriginal: false,
+  },
+  values: {
+    enabled: false,
+    mode: 'map',
+    levels: 6,
+    visibleLevels: 3,
+    opacity: 1,
   },
   palette: {
     source: 'filtered',

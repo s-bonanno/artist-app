@@ -4,6 +4,7 @@ import { drawSquareGrid } from '../grid/drawGrid';
 import type { ReferenceImage } from '../library/referenceTypes';
 import { rgbToHex } from '../palette/colorUtils';
 import type { ColorSample, RgbColor } from '../palette/paletteTypes';
+import { applyValuesToImageData, shouldApplyValues } from '../values/valueTransforms';
 import { getCanvasPixelSize } from './canvasSizing';
 
 type CanvasStageProps = {
@@ -47,7 +48,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
     useEffect(() => {
       draw();
-    }, [state.canvas, state.filters, state.grid, state.viewport]);
+    }, [state.canvas, state.filters, state.grid, state.values, state.viewport]);
 
     function draw() {
       const canvas = canvasRef.current;
@@ -67,12 +68,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       if (loadedImage) {
         const imageRect = getImageDrawRect(width, height, loadedImage, state.viewport);
 
-        ctx.save();
-        ctx.filter = state.filters.showOriginal ? 'none' : getCanvasFilter(state.filters);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(loadedImage, imageRect.x, imageRect.y, imageRect.width, imageRect.height);
-        ctx.restore();
+        drawReferenceImage(ctx, loadedImage, imageRect, width, height, state);
       }
 
       drawSquareGrid(ctx, width, height, {
@@ -249,6 +245,44 @@ function getCanvasFilter(filters: WorkspaceState['filters']) {
   return `blur(${blur}px) brightness(${brightness}%) contrast(${contrast}%)`;
 }
 
+function drawReferenceImage(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  imageRect: ImageDrawRect,
+  canvasWidth: number,
+  canvasHeight: number,
+  state: WorkspaceState,
+) {
+  ctx.save();
+  ctx.filter = state.filters.showOriginal ? 'none' : getCanvasFilter(state.filters);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(image, imageRect.x, imageRect.y, imageRect.width, imageRect.height);
+  ctx.restore();
+
+  if (state.filters.showOriginal || !shouldApplyValues(state.values)) return;
+
+  const visibleRect = getVisibleImageDataRect(imageRect, canvasWidth, canvasHeight);
+  if (!visibleRect) return;
+
+  const imageData = ctx.getImageData(visibleRect.x, visibleRect.y, visibleRect.width, visibleRect.height);
+  applyValuesToImageData(imageData, state.values);
+  ctx.putImageData(imageData, visibleRect.x, visibleRect.y);
+}
+
+function getVisibleImageDataRect(imageRect: ImageDrawRect, canvasWidth: number, canvasHeight: number) {
+  const x = Math.max(0, Math.floor(imageRect.x));
+  const y = Math.max(0, Math.floor(imageRect.y));
+  const right = Math.min(canvasWidth, Math.ceil(imageRect.x + imageRect.width));
+  const bottom = Math.min(canvasHeight, Math.ceil(imageRect.y + imageRect.height));
+  const width = right - x;
+  const height = bottom - y;
+
+  if (width <= 0 || height <= 0) return null;
+
+  return { x, y, width, height };
+}
+
 function sampleImageColor(
   image: HTMLImageElement,
   imageX: number,
@@ -267,13 +301,20 @@ function sampleImageColor(
 
   if (!sampleContext) return [0, 0, 0];
 
-  if (state.palette.source === 'filtered' && !state.filters.showOriginal) {
+  const useFilteredSource = state.palette.source === 'filtered' && !state.filters.showOriginal;
+
+  if (useFilteredSource) {
     sampleContext.filter = getCanvasFilter(state.filters);
   }
 
   sampleContext.drawImage(image, sourceX, sourceY, sampleSize, sampleSize, 0, 0, sampleSize, sampleSize);
 
-  const { data } = sampleContext.getImageData(0, 0, sampleSize, sampleSize);
+  const sampleImageData = sampleContext.getImageData(0, 0, sampleSize, sampleSize);
+  if (useFilteredSource) {
+    applyValuesToImageData(sampleImageData, state.values);
+  }
+
+  const { data } = sampleImageData;
   const channels = [0, 0, 0];
   const pixelCount = data.length / 4;
 

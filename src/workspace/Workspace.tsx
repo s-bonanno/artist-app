@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Check,
+  Contrast,
   Crop,
   Download,
   Grid2X2,
@@ -20,6 +21,7 @@ import type { WorkspaceState } from '../app/appState';
 import { exportCanvas } from '../export/exportCanvas';
 import { rgbToHsl } from '../palette/colorUtils';
 import type { ColorSample, SampleSize } from '../palette/paletteTypes';
+import type { ValueMode } from '../values/valueTypes';
 import { CanvasStage } from './CanvasStage';
 import {
   canvasPresets,
@@ -36,9 +38,14 @@ type WorkspaceProps = {
   onChange: (nextState: WorkspaceState) => void;
 };
 
-type ActiveTool = 'canvas' | 'zoom' | 'grid' | 'palette' | 'filters';
+type ActiveTool = 'canvas' | 'zoom' | 'grid' | 'values' | 'palette' | 'filters';
 
 const sampleSizes: SampleSize[] = [1, 3, 5];
+const valueModes: Array<{ id: ValueMode; label: string }> = [
+  { id: 'map', label: 'Map' },
+  { id: 'shadows', label: 'Shadows' },
+  { id: 'lights', label: 'Lights' },
+];
 
 export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -91,6 +98,25 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
       filters: {
         ...state.filters,
         ...nextFilters,
+      },
+    });
+  }
+
+  function updateValues(nextValues: Partial<WorkspaceState['values']>) {
+    const nextState = {
+      ...state.values,
+      ...nextValues,
+    };
+    const levels = Math.min(12, Math.max(2, Math.round(nextState.levels)));
+    const visibleLevels = Math.min(levels, Math.max(0, Math.round(nextState.visibleLevels)));
+
+    onChange({
+      ...state,
+      values: {
+        ...nextState,
+        levels,
+        visibleLevels,
+        opacity: Math.min(1, Math.max(0, nextState.opacity)),
       },
     });
   }
@@ -225,6 +251,16 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
       exposure: 0,
       contrast: 0,
       showOriginal: false,
+    });
+  }
+
+  function resetValues() {
+    updateValues({
+      enabled: false,
+      mode: 'map',
+      levels: 6,
+      visibleLevels: 3,
+      opacity: 1,
     });
   }
 
@@ -406,6 +442,82 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 onChange={(event) => updateGrid({ color: event.target.value })}
               />
             </label>
+          </div>
+        ) : null}
+
+        {activeTool === 'values' ? (
+          <div className="tool-panel-content">
+            <label className="toggle-row">
+              <span>Active</span>
+              <input
+                type="checkbox"
+                checked={state.values.enabled}
+                onChange={(event) => updateValues({ enabled: event.target.checked })}
+              />
+            </label>
+
+            <div className="option-block">
+              <span>Mode</span>
+              <div className="chip-control" data-options="3" aria-label="Values mode">
+                {valueModes.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    data-active={state.values.mode === mode.id}
+                    onClick={() => updateValues({ enabled: true, mode: mode.id })}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label className="slider-row">
+              <span>Levels</span>
+              <input
+                type="range"
+                min="2"
+                max="12"
+                step="1"
+                value={state.values.levels}
+                onChange={(event) => updateValues({ enabled: true, levels: Number(event.target.value) })}
+              />
+              <strong>{state.values.levels}</strong>
+            </label>
+
+            <label className="slider-row">
+              <span>Visible</span>
+              <input
+                type="range"
+                min="0"
+                max={state.values.levels}
+                step="1"
+                value={state.values.visibleLevels}
+                onChange={(event) => updateValues({ enabled: true, visibleLevels: Number(event.target.value) })}
+              />
+              <strong>
+                {state.values.visibleLevels === 0
+                  ? 'Off'
+                  : `${state.values.visibleLevels}/${state.values.levels}`}
+              </strong>
+            </label>
+
+            <label className="slider-row">
+              <span>Opacity</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={state.values.opacity}
+                onChange={(event) => updateValues({ enabled: true, opacity: Number(event.target.value) })}
+              />
+              <strong>{Math.round(state.values.opacity * 100)}%</strong>
+            </label>
+
+            <button type="button" className="secondary-button" onClick={resetValues}>
+              Reset values
+            </button>
           </div>
         ) : null}
 
@@ -634,6 +746,10 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
             <Grid2X2 size={19} />
             <span>Grid</span>
           </button>
+          <button type="button" data-active={activeTool === 'values'} onClick={() => toggleTool('values')}>
+            <Contrast size={19} />
+            <span>Values</span>
+          </button>
           <button type="button" data-active={activeTool === 'palette'} onClick={() => toggleTool('palette')}>
             <PaletteIcon size={19} />
             <span>Palette</span>
@@ -662,6 +778,13 @@ function getToolLabel(tool: ActiveTool) {
         <>
           <Grid2X2 size={16} />
           Grid scale
+        </>
+      );
+    case 'values':
+      return (
+        <>
+          <Contrast size={16} />
+          Values
         </>
       );
     case 'palette':
