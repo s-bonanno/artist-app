@@ -166,6 +166,18 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
     });
   }
 
+  function setValueLevels(value: string) {
+    const parsedValue = Number(value);
+    if (!Number.isFinite(parsedValue)) return;
+
+    const levels = Math.min(12, Math.max(2, Math.round(parsedValue)));
+    updateValues({
+      enabled: true,
+      levels,
+      visibleLevels: levels,
+    });
+  }
+
   function updatePalette(nextPalette: Partial<WorkspaceState['palette']>) {
     onChange({
       ...state,
@@ -528,7 +540,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                 max="12"
                 step="1"
                 value={state.values.levels}
-                onChange={(event) => updateValues({ enabled: true, levels: Number(event.target.value) })}
+                onChange={(event) => setValueLevels(event.target.value)}
                 {...getSliderProps('values-levels')}
               />
               <strong>{state.values.levels}</strong>
