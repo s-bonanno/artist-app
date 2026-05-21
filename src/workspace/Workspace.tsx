@@ -1,9 +1,10 @@
 import {
   ArrowLeft,
-  Check,
   Contrast,
   Crop,
   Download,
+  Eye,
+  EyeOff,
   Grid2X2,
   Image as ImageIcon,
   Minus,
@@ -19,6 +20,7 @@ import {
 import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { WorkspaceState } from '../app/appState';
 import { exportCanvas } from '../export/exportCanvas';
+import type { GridGuideType } from '../grid/drawGrid';
 import { rgbToHsl } from '../palette/colorUtils';
 import type { ColorSample, SampleSize } from '../palette/paletteTypes';
 import type { ValueMode } from '../values/valueTypes';
@@ -46,11 +48,20 @@ const valueModes: Array<{ id: ValueMode; label: string }> = [
   { id: 'shadows', label: 'Shadows' },
   { id: 'lights', label: 'Lights' },
 ];
+const gridGuideTypes: Array<{ id: GridGuideType; label: string }> = [
+  { id: 'square', label: 'Square grid' },
+  { id: 'cross', label: 'Cross' },
+  { id: 'diagonal-cross', label: 'Diagonal cross' },
+  { id: 'thirds', label: 'Rule of thirds' },
+];
+const minValueDepth = 1;
+const maxValueDepth = 5;
 
 export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
+  const [isPaletteSampling, setIsPaletteSampling] = useState(false);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
     [state.canvas.heightCm, state.canvas.widthCm, state.grid.unit],
@@ -58,6 +69,8 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
   const canvasWidth = formatMeasurement(state.canvas.widthCm, state.canvas.unit);
   const canvasHeight = formatMeasurement(state.canvas.heightCm, state.canvas.unit);
+  const gridGuideType = state.grid.type ?? 'square';
+  const isMeasuredGrid = gridGuideType === 'square';
   const gridSquareSize = convertFromCm(state.grid.squareSizeCm, state.grid.unit);
   const selectedSwatch =
     state.palette.swatches.find((swatch) => swatch.id === state.palette.selectedSwatchId) ??
@@ -67,11 +80,13 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
   function closeTool() {
     setActiveSlider(null);
+    setIsPaletteSampling(false);
     setActiveTool(null);
   }
 
   function toggleTool(tool: ActiveTool) {
     setActiveSlider(null);
+    setIsPaletteSampling(false);
     setActiveTool((currentTool) => (currentTool === tool ? null : tool));
   }
 
@@ -152,7 +167,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
       ...state.values,
       ...nextValues,
     };
-    const levels = Math.min(12, Math.max(2, Math.round(nextState.levels)));
+    const levels = normalizeValueLevels(nextState.levels);
     const visibleLevels = Math.min(levels, Math.max(0, Math.round(nextState.visibleLevels)));
 
     onChange({
@@ -170,11 +185,11 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
     const parsedValue = Number(value);
     if (!Number.isFinite(parsedValue)) return;
 
-    const levels = Math.min(12, Math.max(2, Math.round(parsedValue)));
+    const depth = Math.min(maxValueDepth, Math.max(minValueDepth, Math.round(parsedValue)));
+    const levels = 2 ** depth;
     updateValues({
       enabled: true,
       levels,
-      visibleLevels: levels,
     });
   }
 
@@ -274,6 +289,8 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   function addSwatch(sample: ColorSample) {
     const id = crypto.randomUUID();
 
+    setIsPaletteSampling(false);
+
     onChange({
       ...state,
       palette: {
@@ -315,10 +332,42 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
     updateValues({
       enabled: false,
       mode: 'map',
-      levels: 6,
+      levels: 4,
       visibleLevels: 3,
       opacity: 1,
     });
+  }
+
+  function renderHeaderAction(tool: ActiveTool) {
+    if (tool === 'grid') {
+      return (
+        <button
+          type="button"
+          className="icon-button compact visibility-button"
+          title={state.grid.enabled ? 'Hide grid' : 'Show grid'}
+          data-visible={state.grid.enabled}
+          onClick={() => updateGrid({ enabled: !state.grid.enabled })}
+        >
+          {state.grid.enabled ? <Eye size={16} /> : <EyeOff size={16} />}
+        </button>
+      );
+    }
+
+    if (tool === 'values') {
+      return (
+        <button
+          type="button"
+          className="icon-button compact visibility-button"
+          title={state.values.enabled ? 'Hide values' : 'Show values'}
+          data-visible={state.values.enabled}
+          onClick={() => updateValues({ enabled: !state.values.enabled })}
+        >
+          {state.values.enabled ? <Eye size={16} /> : <EyeOff size={16} />}
+        </button>
+      );
+    }
+
+    return <span aria-hidden="true" />;
   }
 
   function renderSheet() {
@@ -331,9 +380,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
             <X size={16} />
           </button>
           <strong>{getToolLabel(activeTool)}</strong>
-          <button type="button" className="icon-button compact" title="Done" onClick={closeTool}>
-            <Check size={16} />
-          </button>
+          {renderHeaderAction(activeTool)}
         </div>
 
         {activeTool === 'canvas' ? (
@@ -419,52 +466,61 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
         {activeTool === 'grid' ? (
           <div className="tool-panel-content">
-            <label className="toggle-row">
-              <span>Show grid</span>
-              <input
-                type="checkbox"
-                checked={state.grid.enabled}
-                onChange={(event) => updateGrid({ enabled: event.target.checked })}
-              />
-            </label>
-
-            <label className="control-row">
-              <span>Square</span>
-              <div className="measurement-field">
-                <input
-                  type="number"
-                  min={gridLimits.min}
-                  max={gridLimits.max}
-                  step={gridLimits.step}
-                  value={formatMeasurement(state.grid.squareSizeCm, state.grid.unit)}
-                  onChange={(event) => setGridSquareSize(event.target.value)}
-                />
+            <label className="control-row grid-guide-row">
+              <span>Guide</span>
+              <div className="grid-guide-controls">
                 <select
-                  aria-label="Grid square unit"
-                  value={state.grid.unit}
-                  onChange={(event) => setGridUnit(event.target.value as MeasurementUnit)}
+                  aria-label="Grid guide type"
+                  value={gridGuideType}
+                  onChange={(event) => updateGrid({ type: event.target.value as GridGuideType })}
                 >
-                  <option value="cm">cm</option>
-                  <option value="in">in</option>
+                  {gridGuideTypes.map((guide) => (
+                    <option key={guide.id} value={guide.id}>
+                      {guide.label}
+                    </option>
+                  ))}
                 </select>
+                <div className="measurement-field" data-disabled={!isMeasuredGrid}>
+                  <input
+                    aria-label="Grid square size"
+                    type="number"
+                    min={gridLimits.min}
+                    max={gridLimits.max}
+                    step={gridLimits.step}
+                    value={formatMeasurement(state.grid.squareSizeCm, state.grid.unit)}
+                    disabled={!isMeasuredGrid}
+                    onChange={(event) => setGridSquareSize(event.target.value)}
+                  />
+                  <select
+                    aria-label="Grid square unit"
+                    value={state.grid.unit}
+                    disabled={!isMeasuredGrid}
+                    onChange={(event) => setGridUnit(event.target.value as MeasurementUnit)}
+                  >
+                    <option value="cm">cm</option>
+                    <option value="in">in</option>
+                  </select>
+                </div>
               </div>
             </label>
 
-            <label className="slider-row" data-active-slider={activeSlider === 'grid-scale'}>
-              <span>Scale</span>
-              <input
-                type="range"
-                min={gridLimits.min}
-                max={gridLimits.max}
-                step={gridLimits.step}
-                value={gridSquareSize}
-                onChange={(event) => setGridSquareSize(event.target.value)}
-                {...getSliderProps('grid-scale')}
-              />
-              <strong>
-                {formatMeasurement(state.grid.squareSizeCm, state.grid.unit)} {state.grid.unit}
-              </strong>
-            </label>
+            {isMeasuredGrid ? (
+              <label className="slider-row" data-active-slider={activeSlider === 'grid-scale'}>
+                <span>Scale</span>
+                <input
+                  type="range"
+                  min={gridLimits.min}
+                  max={gridLimits.max}
+                  step={gridLimits.step}
+                  value={gridSquareSize}
+                  onChange={(event) => setGridSquareSize(event.target.value)}
+                  {...getSliderProps('grid-scale')}
+                />
+                <strong>
+                  {formatMeasurement(state.grid.squareSizeCm, state.grid.unit)} {state.grid.unit}
+                </strong>
+              </label>
+            ) : null}
 
             <label className="slider-row" data-active-slider={activeSlider === 'grid-opacity'}>
               <span>Opacity</span>
@@ -507,15 +563,6 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
         {activeTool === 'values' ? (
           <div className="tool-panel-content">
-            <label className="toggle-row">
-              <span>Active</span>
-              <input
-                type="checkbox"
-                checked={state.values.enabled}
-                onChange={(event) => updateValues({ enabled: event.target.checked })}
-              />
-            </label>
-
             <div className="option-block">
               <span>Mode</span>
               <div className="chip-control" data-options="3" aria-label="Values mode">
@@ -536,32 +583,14 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               <span>Levels</span>
               <input
                 type="range"
-                min="2"
-                max="12"
+                min={minValueDepth}
+                max={maxValueDepth}
                 step="1"
-                value={state.values.levels}
+                value={getValueDepth(state.values.levels)}
                 onChange={(event) => setValueLevels(event.target.value)}
                 {...getSliderProps('values-levels')}
               />
-              <strong>{state.values.levels}</strong>
-            </label>
-
-            <label className="slider-row" data-active-slider={activeSlider === 'values-visible'}>
-              <span>Visible</span>
-              <input
-                type="range"
-                min="0"
-                max={state.values.levels}
-                step="1"
-                value={state.values.visibleLevels}
-                onChange={(event) => updateValues({ enabled: true, visibleLevels: Number(event.target.value) })}
-                {...getSliderProps('values-visible')}
-              />
-              <strong>
-                {state.values.visibleLevels === 0
-                  ? 'Off'
-                  : `${state.values.visibleLevels}/${state.values.levels}`}
-              </strong>
+              <strong>{normalizeValueLevels(state.values.levels)}</strong>
             </label>
 
             <label className="slider-row" data-active-slider={activeSlider === 'values-opacity'}>
@@ -603,21 +632,32 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               </button>
             </div>
 
-            <div className="chip-control" data-options="3" aria-label="Palette sample size">
-              {sampleSizes.map((sampleSize) => (
-                <button
-                  key={sampleSize}
-                  type="button"
-                  data-active={state.palette.sampleSize === sampleSize}
-                  onClick={() => updatePalette({ sampleSize })}
-                >
-                  {sampleSize}px
-                </button>
-              ))}
+            <div className="palette-sample-row">
+              <button
+                type="button"
+                className="sample-mode-button"
+                onClick={() => setIsPaletteSampling(true)}
+                disabled={!state.image}
+              >
+                <Pipette size={16} />
+                <span>Sample color</span>
+              </button>
+
+              <div className="chip-control compact-chips" data-options="3" aria-label="Palette sample size">
+                {sampleSizes.map((sampleSize) => (
+                  <button
+                    key={sampleSize}
+                    type="button"
+                    data-active={state.palette.sampleSize === sampleSize}
+                    onClick={() => updatePalette({ sampleSize })}
+                  >
+                    {sampleSize}px
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="palette-block">
-              <span>Swatches</span>
               <div className="swatch-strip">
                 {state.palette.swatches.length ? (
                   state.palette.swatches.map((swatch) => (
@@ -631,9 +671,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                       onClick={() => updatePalette({ selectedSwatchId: swatch.id })}
                     />
                   ))
-                ) : (
-                  <span className="empty-swatches">Tap the image to sample</span>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -781,57 +819,65 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
         className="edit-canvas-wrap"
         onPointerDown={() => activeTool && activeTool !== 'palette' && activeTool !== 'zoom' && closeTool()}
       >
-        {activeTool === 'palette' ? (
+        {isPaletteSampling ? (
           <div className="sampling-hint">
             <Pipette size={15} />
-            <span>Tap image to sample</span>
+            <span>Sampling</span>
+            {selectedSwatch ? (
+              <span className="sample-session-swatch" style={{ backgroundColor: selectedSwatch.hex }} />
+            ) : null}
+            <button type="button" className="sample-session-close" title="Close sampling" onClick={() => setIsPaletteSampling(false)}>
+              <X size={14} />
+            </button>
           </div>
         ) : null}
         <CanvasStage
           ref={canvasRef}
           image={state.image}
-          interactionMode={activeTool === 'palette' ? 'sample' : activeTool === 'zoom' ? 'pan' : 'locked'}
+          interactionMode={isPaletteSampling ? 'sample' : activeTool === 'zoom' ? 'pan' : 'locked'}
           state={state}
           onSampleColor={addSwatch}
           onViewportChange={setViewport}
         />
       </div>
 
-      <section
-        className="tool-dock"
-        data-open={Boolean(activeTool)}
-        data-sliding={Boolean(activeSlider)}
-        aria-label="Editing tools"
-      >
-        {renderSheet()}
+      {!isPaletteSampling ? (
+        <section
+          className="tool-dock"
+          data-open={Boolean(activeTool)}
+          data-sliding={Boolean(activeSlider)}
+          aria-label="Editing tools"
+        >
+          {renderSheet()}
 
-        <nav className="tool-strip" aria-label="Tool categories">
-          <button type="button" data-active={activeTool === 'canvas'} onClick={() => toggleTool('canvas')}>
-            <Crop size={19} />
-            <span>Canvas</span>
-          </button>
-          <button type="button" data-active={activeTool === 'zoom'} onClick={() => toggleTool('zoom')}>
-            <ZoomIn size={19} />
-            <span>Zoom</span>
-          </button>
-          <button type="button" data-active={activeTool === 'grid'} onClick={() => toggleTool('grid')}>
-            <Grid2X2 size={19} />
-            <span>Grid</span>
-          </button>
-          <button type="button" data-active={activeTool === 'values'} onClick={() => toggleTool('values')}>
-            <Contrast size={19} />
-            <span>Values</span>
-          </button>
-          <button type="button" data-active={activeTool === 'palette'} onClick={() => toggleTool('palette')}>
-            <PaletteIcon size={19} />
-            <span>Palette</span>
-          </button>
-          <button type="button" data-active={activeTool === 'filters'} onClick={() => toggleTool('filters')}>
-            <SlidersHorizontal size={19} />
-            <span>Filters</span>
-          </button>
-        </nav>
-      </section>
+          <nav className="tool-strip" aria-label="Tool categories">
+            <button type="button" data-active={activeTool === 'canvas'} onClick={() => toggleTool('canvas')}>
+              <Crop size={19} />
+              <span>Canvas</span>
+            </button>
+            <button type="button" data-active={activeTool === 'zoom'} onClick={() => toggleTool('zoom')}>
+              <ZoomIn size={19} />
+              <span>Zoom</span>
+            </button>
+            <button type="button" data-active={activeTool === 'grid'} onClick={() => toggleTool('grid')}>
+              <Grid2X2 size={19} />
+              <span>Grid</span>
+            </button>
+            <button type="button" data-active={activeTool === 'values'} onClick={() => toggleTool('values')}>
+              <Contrast size={19} />
+              <span>Values</span>
+            </button>
+            <button type="button" data-active={activeTool === 'palette'} onClick={() => toggleTool('palette')}>
+              <PaletteIcon size={19} />
+              <span>Palette</span>
+            </button>
+            <button type="button" data-active={activeTool === 'filters'} onClick={() => toggleTool('filters')}>
+              <SlidersHorizontal size={19} />
+              <span>Filters</span>
+            </button>
+          </nav>
+        </section>
+      ) : null}
     </main>
   );
 }
@@ -849,7 +895,7 @@ function getToolLabel(tool: ActiveTool) {
       return (
         <>
           <Grid2X2 size={16} />
-          Grid scale
+          Grid
         </>
       );
     case 'values':
@@ -862,7 +908,7 @@ function getToolLabel(tool: ActiveTool) {
     case 'palette':
       return (
         <>
-          <Pipette size={16} />
+          <PaletteIcon size={16} />
           Palette
         </>
       );
@@ -881,4 +927,13 @@ function getToolLabel(tool: ActiveTool) {
         </>
       );
   }
+}
+
+function normalizeValueLevels(levels: number) {
+  return 2 ** getValueDepth(levels);
+}
+
+function getValueDepth(levels: number) {
+  const depth = Math.round(Math.log2(Math.max(2, levels)));
+  return Math.min(maxValueDepth, Math.max(minValueDepth, depth));
 }

@@ -1,6 +1,14 @@
-import { forwardRef, PointerEvent, useEffect, useImperativeHandle, useRef, useState, WheelEvent } from 'react';
+import {
+  forwardRef,
+  PointerEvent,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  WheelEvent,
+} from 'react';
 import type { WorkspaceState } from '../app/appState';
-import { drawSquareGrid } from '../grid/drawGrid';
+import { drawGridGuides } from '../grid/drawGrid';
 import type { ReferenceImage } from '../library/referenceTypes';
 import { rgbToHex } from '../palette/colorUtils';
 import type { ColorSample, RgbColor } from '../palette/paletteTypes';
@@ -22,14 +30,79 @@ type ImageDrawRect = {
   height: number;
 };
 
+type ViewTransform = {
+  zoom: number;
+  panX: number;
+  panY: number;
+};
+
+type SamplePreview = {
+  canvasX: number;
+  canvasY: number;
+  left: number;
+  top: number;
+  hex: string;
+};
+
+const defaultViewTransform: ViewTransform = {
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+};
+
+const minViewZoom = 1;
+const maxViewZoom = 6;
+
 export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
   function CanvasStage({ image, interactionMode, state, onSampleColor, onViewportChange }, forwardedRef) {
+    const stageRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const sampleLoupeRef = useRef<HTMLCanvasElement | null>(null);
     const loadedImageRef = useRef<HTMLImageElement | null>(null);
     const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+    const lastViewPointerRef = useRef<{ x: number; y: number } | null>(null);
+    const isSpacePressedRef = useRef(false);
     const [isPanning, setIsPanning] = useState(false);
+    const [isViewPanning, setIsViewPanning] = useState(false);
+    const [isSpacePressed, setIsSpacePressed] = useState(false);
+    const [viewTransform, setViewTransform] = useState<ViewTransform>(defaultViewTransform);
+    const [samplePreview, setSamplePreview] = useState<SamplePreview | null>(null);
+    const isViewAdjusted =
+      viewTransform.zoom > 1.001 || Math.abs(viewTransform.panX) > 0.5 || Math.abs(viewTransform.panY) > 0.5;
 
     useImperativeHandle(forwardedRef, () => canvasRef.current as HTMLCanvasElement, []);
+
+    useEffect(() => {
+      const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+        if (event.code !== 'Space' || isTypingTarget(event.target)) return;
+
+        event.preventDefault();
+        isSpacePressedRef.current = true;
+        setIsSpacePressed(true);
+      };
+
+      const handleKeyUp = (event: globalThis.KeyboardEvent) => {
+        if (event.code !== 'Space') return;
+
+        event.preventDefault();
+        isSpacePressedRef.current = false;
+        setIsSpacePressed(false);
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
+
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+      };
+    }, []);
+
+    useEffect(() => {
+      setViewTransform(defaultViewTransform);
+      setIsViewPanning(false);
+      lastViewPointerRef.current = null;
+    }, [image?.id, state.canvas.widthCm, state.canvas.heightCm]);
 
     useEffect(() => {
       if (!image) {
@@ -49,6 +122,18 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     useEffect(() => {
       draw();
     }, [state.canvas, state.filters, state.grid, state.values, state.viewport]);
+
+    useEffect(() => {
+      if (interactionMode !== 'sample') {
+        setSamplePreview(null);
+      }
+    }, [interactionMode]);
+
+    useEffect(() => {
+      if (!samplePreview) return;
+
+      drawSampleLoupe(samplePreview.canvasX, samplePreview.canvasY);
+    }, [samplePreview]);
 
     function draw() {
       const canvas = canvasRef.current;
@@ -71,8 +156,9 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         drawReferenceImage(ctx, loadedImage, imageRect, width, height, state);
       }
 
-      drawSquareGrid(ctx, width, height, {
+      drawGridGuides(ctx, width, height, {
         enabled: state.grid.enabled,
+        type: state.grid.type,
         spacing: state.grid.squareSizeCm * pixelsPerCm,
         color: state.grid.color,
         opacity: state.grid.opacity,
@@ -129,11 +215,83 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       });
     }
 
+    function updateSamplePreview(event: PointerEvent<HTMLCanvasElement>) {
+      const canvas = event.currentTarget;
+      const loadedImage = loadedImageRef.current;
+      const stageRect = stageRef.current?.getBoundingClientRect();
+      if (!loadedImage || !stageRect) return;
+
+      const point = getCanvasPoint(event);
+      const imageRect = getImageDrawRect(canvas.width, canvas.height, loadedImage, state.viewport);
+      const isInsideImage =
+        point.x >= imageRect.x &&
+        point.x <= imageRect.x + imageRect.width &&
+        point.y >= imageRect.y &&
+        point.y <= imageRect.y + imageRect.height;
+
+      if (!isInsideImage) {
+        setSamplePreview(null);
+        return;
+      }
+
+      const imageX = ((point.x - imageRect.x) / imageRect.width) * loadedImage.naturalWidth;
+      const imageY = ((point.y - imageRect.y) / imageRect.height) * loadedImage.naturalHeight;
+      const rgb = sampleImageColor(loadedImage, imageX, imageY, state);
+      const loupeSize = 116;
+      const left = clamp(event.clientX - stageRect.left + 18, 12, Math.max(12, stageRect.width - loupeSize - 12));
+      const top = clamp(event.clientY - stageRect.top - loupeSize - 18, 12, Math.max(12, stageRect.height - loupeSize - 12));
+
+      setSamplePreview({
+        canvasX: point.x,
+        canvasY: point.y,
+        left,
+        top,
+        hex: rgbToHex(rgb),
+      });
+    }
+
+    function drawSampleLoupe(canvasX: number, canvasY: number) {
+      const canvas = canvasRef.current;
+      const loupe = sampleLoupeRef.current;
+      if (!canvas || !loupe) return;
+
+      const ctx = loupe.getContext('2d');
+      if (!ctx) return;
+
+      const sourceSize = 34;
+      ctx.clearRect(0, 0, loupe.width, loupe.height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(
+        canvas,
+        clamp(canvasX - sourceSize / 2, 0, canvas.width - sourceSize),
+        clamp(canvasY - sourceSize / 2, 0, canvas.height - sourceSize),
+        sourceSize,
+        sourceSize,
+        0,
+        0,
+        loupe.width,
+        loupe.height,
+      );
+    }
+
     function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
       if (!image) return;
 
+      if (isSpacePressedRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        lastViewPointerRef.current = {
+          x: event.clientX,
+          y: event.clientY,
+        };
+        setIsViewPanning(true);
+        return;
+      }
+
       if (interactionMode === 'sample') {
         event.preventDefault();
+        updateSamplePreview(event);
         handleSample(event);
         return;
       }
@@ -149,6 +307,28 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
+      if (isViewPanning && lastViewPointerRef.current) {
+        const deltaX = event.clientX - lastViewPointerRef.current.x;
+        const deltaY = event.clientY - lastViewPointerRef.current.y;
+
+        lastViewPointerRef.current = {
+          x: event.clientX,
+          y: event.clientY,
+        };
+
+        setViewTransform((current) => ({
+          ...current,
+          panX: current.panX + deltaX,
+          panY: current.panY + deltaY,
+        }));
+        return;
+      }
+
+      if (interactionMode === 'sample') {
+        updateSamplePreview(event);
+        return;
+      }
+
       if (!isPanning || !lastPointerRef.current || interactionMode !== 'pan') return;
 
       const scale = getCanvasScale(event.currentTarget);
@@ -174,10 +354,20 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       lastPointerRef.current = null;
       setIsPanning(false);
+      lastViewPointerRef.current = null;
+      setIsViewPanning(false);
     }
 
     function handleWheel(event: WheelEvent<HTMLCanvasElement>) {
-      if (!image || interactionMode !== 'pan') return;
+      if (!image) return;
+
+      if (event.metaKey || event.ctrlKey) {
+        event.preventDefault();
+        zoomViewAtPoint(event);
+        return;
+      }
+
+      if (interactionMode !== 'pan') return;
 
       event.preventDefault();
 
@@ -200,20 +390,75 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       });
     }
 
+    function zoomViewAtPoint(event: WheelEvent<HTMLCanvasElement>) {
+      const stageRect = stageRef.current?.getBoundingClientRect();
+      const centerX = stageRect ? stageRect.left + stageRect.width / 2 : event.clientX;
+      const centerY = stageRect ? stageRect.top + stageRect.height / 2 : event.clientY;
+      const pointerX = event.clientX - centerX;
+      const pointerY = event.clientY - centerY;
+
+      setViewTransform((current) => {
+        const nextZoom = clamp(current.zoom * Math.exp(-event.deltaY * 0.002), minViewZoom, maxViewZoom);
+        const ratio = nextZoom / current.zoom;
+
+        if (nextZoom === minViewZoom && current.zoom !== minViewZoom) {
+          return defaultViewTransform;
+        }
+
+        return {
+          zoom: nextZoom,
+          panX: pointerX - (pointerX - current.panX) * ratio,
+          panY: pointerY - (pointerY - current.panY) * ratio,
+        };
+      });
+    }
+
+    function resetViewTransform() {
+      setViewTransform(defaultViewTransform);
+    }
+
     return (
-      <div className="canvas-stage">
-        <canvas
-          ref={canvasRef}
-          aria-label="Reference workspace canvas"
-          data-locked={interactionMode === 'locked'}
-          data-panning={isPanning}
-          data-sampling={interactionMode === 'sample'}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={endPan}
-          onPointerCancel={endPan}
-          onWheel={handleWheel}
-        />
+      <div className="canvas-stage" ref={stageRef} data-sampling={interactionMode === 'sample'}>
+        <div
+          className="canvas-view-pan"
+          style={{ transform: `translate3d(${viewTransform.panX}px, ${viewTransform.panY}px, 0)` }}
+        >
+          <div className="canvas-view-scale" style={{ transform: `scale(${viewTransform.zoom})` }}>
+            <canvas
+              ref={canvasRef}
+              aria-label="Reference workspace canvas"
+              data-locked={interactionMode === 'locked'}
+              data-panning={isPanning}
+              data-sampling={interactionMode === 'sample'}
+              data-view-pan-ready={isSpacePressed}
+              data-view-panning={isViewPanning}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={endPan}
+              onPointerCancel={endPan}
+              onPointerLeave={() => setSamplePreview(null)}
+              onWheel={handleWheel}
+            />
+          </div>
+        </div>
+        {interactionMode === 'sample' && samplePreview ? (
+          <div className="sample-loupe" style={{ left: samplePreview.left, top: samplePreview.top }}>
+            <canvas ref={sampleLoupeRef} width="112" height="112" />
+            <span className="sample-loupe-crosshair" />
+            <span className="sample-loupe-swatch" style={{ backgroundColor: samplePreview.hex }} />
+          </div>
+        ) : null}
+        {isViewAdjusted ? (
+          <button
+            type="button"
+            className="view-fit-button"
+            onClick={resetViewTransform}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <span>{Math.round(viewTransform.zoom * 100)}%</span>
+            <strong>Fit</strong>
+          </button>
+        ) : null}
       </div>
     );
   },
@@ -333,4 +578,10 @@ function sampleImageColor(
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function isTypingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return target.isContentEditable || ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }

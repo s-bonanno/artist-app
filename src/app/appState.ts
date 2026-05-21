@@ -1,3 +1,4 @@
+import type { GridGuideType } from '../grid/drawGrid';
 import type { ReferenceImage } from '../library/referenceTypes';
 import type { PaletteSource, PaletteSwatch, SampleSize } from '../palette/paletteTypes';
 import type { ValueSettings } from '../values/valueTypes';
@@ -18,6 +19,7 @@ export type WorkspaceState = {
   };
   grid: {
     enabled: boolean;
+    type: GridGuideType;
     squareSizeCm: number;
     unit: 'cm' | 'in';
     color: string;
@@ -55,6 +57,7 @@ export const initialWorkspaceState: WorkspaceState = {
   },
   grid: {
     enabled: true,
+    type: 'square',
     squareSizeCm: 5.08,
     unit: 'in',
     color: '#f8fafc',
@@ -70,7 +73,7 @@ export const initialWorkspaceState: WorkspaceState = {
   values: {
     enabled: false,
     mode: 'map',
-    levels: 6,
+    levels: 4,
     visibleLevels: 3,
     opacity: 1,
   },
