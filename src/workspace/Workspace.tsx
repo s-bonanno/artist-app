@@ -54,6 +54,13 @@ const gridGuideTypes: Array<{ id: GridGuideType; label: string }> = [
   { id: 'diagonal-cross', label: 'Diagonal cross' },
   { id: 'thirds', label: 'Rule of thirds' },
 ];
+const gridColorPresets = [
+  { label: 'White', value: '#f8fafc' },
+  { label: 'Black', value: '#111214' },
+  { label: 'Red', value: '#ff3b5c' },
+  { label: 'Blue', value: '#4aa3ff' },
+  { label: 'Yellow', value: '#ffd84d' },
+];
 const minValueDepth = 1;
 const maxValueDepth = 5;
 
@@ -552,11 +559,29 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
             <label className="control-row">
               <span>Color</span>
-              <input
-                type="color"
-                value={state.grid.color}
-                onChange={(event) => updateGrid({ color: event.target.value })}
-              />
+              <div className="grid-color-controls">
+                {gridColorPresets.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    className="grid-color-swatch"
+                    title={preset.label}
+                    aria-label={`${preset.label} grid`}
+                    data-active={state.grid.color.toLowerCase() === preset.value}
+                    onClick={() => updateGrid({ color: preset.value })}
+                  >
+                    <span style={{ backgroundColor: preset.value }} />
+                  </button>
+                ))}
+                <input
+                  className="grid-color-picker"
+                  aria-label="Custom grid color"
+                  type="color"
+                  title="Custom color"
+                  value={state.grid.color}
+                  onChange={(event) => updateGrid({ color: event.target.value })}
+                />
+              </div>
             </label>
           </div>
         ) : null}

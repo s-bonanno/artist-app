@@ -947,6 +947,37 @@ input[type="number"] {
   font-weight: 500;
 }
 
+.grid-color-controls {
+  display: flex;
+  grid-column: 2 / -1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.grid-color-swatch {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.06);
+}
+
+.grid-color-swatch span {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.28);
+}
+
+.grid-color-swatch[data-active="true"] {
+  border-color: rgb(122 183 255 / 0.55);
+  background: rgb(122 183 255 / 0.16);
+}
+
 input[type="color"] {
   width: 42px;
   height: 28px;
@@ -954,6 +985,12 @@ input[type="color"] {
   border: 1px solid rgb(255 255 255 / 0.16);
   border-radius: 2px;
   background: transparent;
+}
+
+.grid-color-picker {
+  width: 32px;
+  height: 32px;
+  background: rgb(255 255 255 / 0.06);
 }
 
 input[type="range"] {
