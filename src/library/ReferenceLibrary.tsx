@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, Grid2X2, ImagePlus, Plus, Upload, X } from 'lucide-react';
+import { ArrowLeft, Bookmark, Grid2X2, ImagePlus, Upload, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ReferenceImage } from './referenceTypes';
 
@@ -18,17 +18,84 @@ type LibraryCategory = {
   tags?: string[];
 };
 
+type LibraryShelf = {
+  id: string;
+  label: string;
+  description: string;
+  categoryId: string;
+  tags: string[];
+};
+
+type InspirationCategory = {
+  id: string;
+  label: string;
+  tags: string[];
+};
+
 const libraryCategories: LibraryCategory[] = [
   { id: 'all', label: 'All', description: 'Every reference in the library.' },
-  { id: 'bargue', label: 'Bargue', description: 'Academic plates for accuracy, proportion, and value.', tags: ['bargue', 'academic'] },
+  { id: 'bargue', label: 'Bargue', description: 'Academic plates for accuracy, proportion, and value.', tags: ['bargue'] },
   { id: 'drawing', label: 'Drawing', description: 'Line, proportion, block-in, and careful copy references.', tags: ['drawing'] },
   { id: 'technical', label: 'Technical', description: 'Structured studies for measurement, transfer, and accuracy.', tags: ['technical'] },
   { id: 'portrait', label: 'Portrait', description: 'Heads and portraits for likeness, color, and planes.', tags: ['portrait'] },
   { id: 'figure', label: 'Figure', description: 'Full figure studies, gesture, anatomy, and rhythm.', tags: ['figure'] },
   { id: 'landscape', label: 'Landscape', description: 'Outdoor references for light, atmosphere, and composition.', tags: ['landscape'] },
   { id: 'still-life', label: 'Still life', description: 'Objects, casts, and setups for observation.', tags: ['still-life'] },
-  { id: 'color', label: 'Color', description: 'References suited to color mixing and palette studies.', tags: ['color'] },
-  { id: 'value', label: 'Value', description: 'References with clear light and shadow families.', tags: ['value'] },
+  { id: 'animals', label: 'Animals', description: 'Animal references for structure, gesture, silhouette, and coat textures.', tags: ['animal'] },
+];
+
+const libraryShelves: LibraryShelf[] = [
+  {
+    id: 'portraits',
+    label: 'Portrait studies',
+    description: 'Heads, likeness, planes, and controlled flesh colour.',
+    categoryId: 'portrait',
+    tags: ['portrait'],
+  },
+  {
+    id: 'figures',
+    label: 'Figure studies',
+    description: 'Gesture, anatomy, rhythm, and figure groupings.',
+    categoryId: 'figure',
+    tags: ['figure'],
+  },
+  {
+    id: 'still-life',
+    label: 'Still life',
+    description: 'Objects, edges, reflections, and colour mixing.',
+    categoryId: 'still-life',
+    tags: ['still-life'],
+  },
+  {
+    id: 'landscapes',
+    label: 'Landscape',
+    description: 'Atmosphere, light, composition, and outdoor colour.',
+    categoryId: 'landscape',
+    tags: ['landscape'],
+  },
+  {
+    id: 'animals',
+    label: 'Animals',
+    description: 'Horses, cattle, and animal studies for gesture, structure, and anatomy.',
+    categoryId: 'animals',
+    tags: ['animal'],
+  },
+  {
+    id: 'technical-drawing',
+    label: 'Technical drawing',
+    description: 'Bargue, master drawings, drapery, and construction studies.',
+    categoryId: 'technical',
+    tags: ['technical'],
+  },
+];
+
+const inspirationCategories: InspirationCategory[] = [
+  { id: 'portrait', label: 'Portrait', tags: ['portrait'] },
+  { id: 'figure', label: 'Figure', tags: ['figure'] },
+  { id: 'landscape', label: 'Landscape', tags: ['landscape'] },
+  { id: 'still-life', label: 'Still life', tags: ['still-life'] },
+  { id: 'animals', label: 'Animals', tags: ['animal'] },
+  { id: 'technical', label: 'Technical drawing', tags: ['technical', 'bargue'] },
 ];
 
 export function ReferenceLibrary({
@@ -38,7 +105,7 @@ export function ReferenceLibrary({
   onUploadImage,
 }: ReferenceLibraryProps) {
   const [activeTab, setActiveTab] = useState<LibraryTab>('upload');
-  const [activeCategoryId, setActiveCategoryId] = useState('all');
+  const [activeCategoryId, setActiveCategoryId] = useState('overview');
   const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
 
   const availableCategories = useMemo(() => {
@@ -52,8 +119,21 @@ export function ReferenceLibrary({
 
   const activeCategory = availableCategories.find((category) => category.id === activeCategoryId) ?? availableCategories[0];
   const categoryReferences = getReferencesForCategory(references, activeCategory);
-  const featuredReferences = references.filter((reference) => reference.tags?.includes('featured'));
-  const suggestedReferences = (featuredReferences.length ? featuredReferences : references).slice(0, 4);
+  const inspirationPicks = useMemo(() => getInspirationPicks(references), [references]);
+  const libraryShelfGroups = useMemo(() => {
+    return libraryShelves
+      .map((shelf) => {
+        const shelfReferences = getShelfReferences(references, shelf);
+
+        return {
+          shelf,
+          references: shelfReferences.slice(0, 8),
+          count: shelfReferences.length,
+        };
+      })
+      .filter((group) => group.references.length > 0);
+  }, [references]);
+  const isLibraryOverview = activeCategoryId === 'overview';
 
   function handleUpload(file: File | undefined) {
     if (!file) return;
@@ -112,7 +192,7 @@ export function ReferenceLibrary({
         <div className="brand-mark">AA</div>
         <h1>Art Assistant</h1>
         <label className="icon-button" title="Upload image">
-          <Plus size={18} />
+          <ImagePlus size={19} />
           <input
             type="file"
             accept="image/*"
@@ -138,48 +218,122 @@ export function ReferenceLibrary({
               />
             </label>
 
-            <section className="suggested-section" aria-label="Suggested studies">
-              <div className="gallery-section-heading">
+            <section className="inspiration-section" aria-label="Looking for inspiration">
+              <div className="inspiration-heading">
                 <div>
-                  <strong>Suggested studies</strong>
-                  <span>Sargent, Bargue, and atelier-friendly references for classical study.</span>
+                  <strong>Looking for inspiration?</strong>
+                  <span>A rotating set of studies from the library.</span>
                 </div>
-                <button type="button" onClick={() => setActiveTab('library')}>
-                  Browse
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('library');
+                    setActiveCategoryId('overview');
+                  }}
+                >
+                  Browse library
                 </button>
               </div>
-              <div className="suggested-strip">{renderReferenceGrid(suggestedReferences, 'compact')}</div>
+              <div className="inspiration-grid">
+                {inspirationPicks.map(({ category, reference }) => (
+                  <button
+                    type="button"
+                    className="inspiration-card"
+                    key={category.id}
+                    onClick={() => openLibraryPreview(reference)}
+                  >
+                    <img src={reference.thumbnailSrc ?? reference.src} alt="" />
+                    <span>
+                      <small>{category.label}</small>
+                      <strong>{reference.title}</strong>
+                      <em>{reference.artist ?? reference.category}</em>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </section>
           </div>
         ) : null}
 
         {activeTab === 'library' ? (
           <div className="library-panel">
-            <div className="library-intent">
-              <strong>Choose a study</strong>
-              <span>{activeCategory.description}</span>
-            </div>
+            {isLibraryOverview ? (
+              <>
+                <div className="library-intent">
+                  <strong>Library</strong>
+                  <span>Browse curated study groups from the reference collection.</span>
+                </div>
 
-            <div className="category-strip" aria-label="Library categories">
-              {availableCategories.map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  data-active={activeCategory.id === category.id}
-                  onClick={() => setActiveCategoryId(category.id)}
-                >
-                  <span>{category.label}</span>
-                  <small>{category.count}</small>
-                </button>
-              ))}
-            </div>
+                <div className="library-shelves">
+                  {libraryShelfGroups.map(({ shelf, references: shelfReferences, count }) => (
+                    <section className="library-shelf" key={shelf.id} aria-label={shelf.label}>
+                      <div className="library-shelf-heading">
+                        <div>
+                          <strong>{shelf.label}</strong>
+                          <span>{shelf.description}</span>
+                        </div>
+                        <button type="button" onClick={() => setActiveCategoryId(shelf.categoryId)}>
+                          View all
+                          <small>{count}</small>
+                        </button>
+                      </div>
 
-            <div className="gallery-filter-row">
-              <strong>{activeCategory.label}</strong>
-              <span>{categoryReferences.length} references</span>
-            </div>
+                      <div className="library-shelf-scroll">
+                        {shelfReferences.map((reference) => (
+                          <button
+                            type="button"
+                            className="gallery-card library-shelf-card"
+                            data-selected={selectedImage?.id === reference.id}
+                            key={`${shelf.id}-${reference.id}`}
+                            onClick={() => openLibraryPreview(reference)}
+                          >
+                            <img src={reference.thumbnailSrc ?? reference.src} alt="" />
+                            <span>
+                              <strong>{reference.title}</strong>
+                              <small>{reference.artist ?? reference.category ?? reference.rights}</small>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="library-detail-heading">
+                  <button type="button" className="library-back-button" onClick={() => setActiveCategoryId('overview')}>
+                    <ArrowLeft size={17} />
+                    <span>Library</span>
+                  </button>
+                  <div>
+                    <strong>{activeCategory.label}</strong>
+                    <span>{activeCategory.description}</span>
+                  </div>
+                </div>
 
-            {renderReferenceGrid(categoryReferences)}
+                <div className="category-strip" aria-label="Library categories">
+                  {availableCategories.map((category) => (
+                    <button
+                      key={category.id}
+                      type="button"
+                      data-active={activeCategory.id === category.id}
+                      onClick={() => setActiveCategoryId(category.id)}
+                    >
+                      <span>{category.label}</span>
+                      <small>{category.count}</small>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="gallery-filter-row">
+                  <strong>{activeCategory.label}</strong>
+                  <span>{categoryReferences.length} references</span>
+                </div>
+
+                {renderReferenceGrid(categoryReferences)}
+              </>
+            )}
           </div>
         ) : null}
 
@@ -197,7 +351,14 @@ export function ReferenceLibrary({
           <Upload size={18} />
           <span>Upload</span>
         </button>
-        <button type="button" data-active={activeTab === 'library'} onClick={() => setActiveTab('library')}>
+        <button
+          type="button"
+          data-active={activeTab === 'library'}
+          onClick={() => {
+            setActiveTab('library');
+            setActiveCategoryId('overview');
+          }}
+        >
           <Grid2X2 size={18} />
           <span>Library</span>
         </button>
@@ -235,11 +396,12 @@ export function ReferenceLibrary({
               <span>{previewImage.description ?? previewImage.category ?? 'Library reference'}</span>
             </div>
 
-            <div className="reference-preview-meta">
-              {previewImage.category ? <span>{previewImage.category}</span> : null}
-              {previewImage.rights ? <span>{previewImage.rights}</span> : null}
-              {previewImage.suggestedUse ? <span>{previewImage.suggestedUse}</span> : null}
-              {previewImage.sourceUrl ? (
+            {previewImage.sourceUrl ? (
+              <div className="reference-preview-source">
+                <span>
+                  <strong>Source</strong>
+                  <small>{formatSourceSummary(previewImage)}</small>
+                </span>
                 <a
                   href={previewImage.sourceUrl}
                   target="_blank"
@@ -247,16 +409,8 @@ export function ReferenceLibrary({
                   title={previewImage.sourceUrl}
                   aria-label={`Open source for ${previewImage.title}`}
                 >
-                  Source
+                  Open
                 </a>
-              ) : null}
-            </div>
-
-            {previewImage.tags?.length ? (
-              <div className="reference-preview-tags">
-                {previewImage.tags.slice(0, 6).map((tag) => (
-                  <span key={tag}>{formatTag(tag)}</span>
-                ))}
               </div>
             ) : null}
 
@@ -273,15 +427,60 @@ export function ReferenceLibrary({
 function getReferencesForCategory(references: ReferenceImage[], category: LibraryCategory) {
   if (category.id === 'all') return references;
 
-  return references.filter((reference) => {
-    const tags = reference.tags ?? [];
-    return category.tags?.some((tag) => tags.includes(tag) || reference.category?.toLowerCase().includes(tag));
+  return references.filter((reference) => category.tags?.some((tag) => referenceMatchesTag(reference, tag)));
+}
+
+function getShelfReferences(references: ReferenceImage[], shelf: LibraryShelf) {
+  return references
+    .filter((reference) => shelf.tags.some((tag) => referenceMatchesTag(reference, tag)))
+    .sort((first, second) => {
+      const firstIsBargue = first.tags?.includes('bargue') ? 1 : 0;
+      const secondIsBargue = second.tags?.includes('bargue') ? 1 : 0;
+      const firstFeatured = first.tags?.includes('featured') ? 1 : 0;
+      const secondFeatured = second.tags?.includes('featured') ? 1 : 0;
+
+      if (shelf.id === 'technical-drawing' && firstIsBargue !== secondIsBargue) {
+        return firstIsBargue - secondIsBargue;
+      }
+
+      return secondFeatured - firstFeatured;
+    });
+}
+
+function referenceMatchesTag(reference: ReferenceImage, tag: string) {
+  const tags = reference.tags ?? [];
+  return tags.includes(tag) || Boolean(reference.category?.toLowerCase().includes(tag));
+}
+
+function getInspirationPicks(references: ReferenceImage[]) {
+  return shuffleItems(inspirationCategories).slice(0, 4).flatMap((category) => {
+    const matches = references.filter((reference) => {
+      const tags = reference.tags ?? [];
+      return category.tags.some((tag) => tags.includes(tag));
+    });
+    const reference = getRandomItem(matches);
+
+    return reference ? [{ category, reference }] : [];
   });
 }
 
-function formatTag(tag: string) {
-  return tag
-    .split('-')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+function getRandomItem<T>(items: T[]) {
+  if (!items.length) return null;
+
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function shuffleItems<T>(items: T[]) {
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+function formatSourceSummary(image: ReferenceImage) {
+  return [image.credit, image.rights].filter(Boolean).join(' · ');
 }
