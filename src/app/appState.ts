@@ -27,9 +27,13 @@ export type WorkspaceState = {
     lineWidth: number;
   };
   filters: {
+    enabled: boolean;
     blur: number;
     exposure: number;
     contrast: number;
+    highlights: number;
+    shadows: number;
+    saturation: number;
     showOriginal: boolean;
   };
   values: ValueSettings;
@@ -65,9 +69,13 @@ export const initialWorkspaceState: WorkspaceState = {
     lineWidth: 1,
   },
   filters: {
+    enabled: false,
     blur: 0,
     exposure: 0,
     contrast: 0,
+    highlights: 0,
+    shadows: 0,
+    saturation: 100,
     showOriginal: false,
   },
   values: {

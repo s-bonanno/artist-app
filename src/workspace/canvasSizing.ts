@@ -1,4 +1,6 @@
 export const CM_PER_INCH = 2.54;
+export const DEFAULT_CANVAS_RENDER_LONG_SIDE = 2400;
+export const BASE_CANVAS_RENDER_LONG_SIDE = 1200;
 
 export type MeasurementUnit = 'cm' | 'in';
 
@@ -39,7 +41,7 @@ export function formatMeasurement(valueCm: number, unit: MeasurementUnit) {
   return value.toFixed(decimals).replace(/\.?0+$/, '');
 }
 
-export function getCanvasPixelSize(widthCm: number, heightCm: number, maxLongSide = 1200) {
+export function getCanvasPixelSize(widthCm: number, heightCm: number, maxLongSide = DEFAULT_CANVAS_RENDER_LONG_SIDE) {
   const aspectRatio = widthCm / heightCm;
 
   if (aspectRatio >= 1) {
@@ -72,4 +74,3 @@ export function getGridLimits(widthCm: number, heightCm: number, unit: Measureme
     step: unit === 'in' ? 0.01 : 0.1,
   };
 }
-

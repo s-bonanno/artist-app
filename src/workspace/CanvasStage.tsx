@@ -13,7 +13,7 @@ import type { ReferenceImage } from '../library/referenceTypes';
 import { rgbToHex } from '../palette/colorUtils';
 import type { ColorSample, RgbColor } from '../palette/paletteTypes';
 import { applyValuesToImageData, shouldApplyValues } from '../values/valueTransforms';
-import { getCanvasPixelSize } from './canvasSizing';
+import { BASE_CANVAS_RENDER_LONG_SIDE, getCanvasPixelSize } from './canvasSizing';
 
 type CanvasStageProps = {
   image: ReferenceImage | null;
@@ -143,6 +143,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       if (!ctx) return;
 
       const { width, height, pixelsPerCm } = getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm);
+      const renderScale = Math.max(width, height) / BASE_CANVAS_RENDER_LONG_SIDE;
       canvas.width = width;
       canvas.height = height;
 
@@ -153,7 +154,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       if (loadedImage) {
         const imageRect = getImageDrawRect(width, height, loadedImage, state.viewport);
 
-        drawReferenceImage(ctx, loadedImage, imageRect, width, height, state);
+        drawReferenceImage(ctx, loadedImage, imageRect, width, height, state, renderScale);
       }
 
       drawGridGuides(ctx, width, height, {
@@ -162,7 +163,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         spacing: state.grid.squareSizeCm * pixelsPerCm,
         color: state.grid.color,
         opacity: state.grid.opacity,
-        lineWidth: state.grid.lineWidth,
+        lineWidth: state.grid.lineWidth * renderScale,
       });
     }
 
@@ -482,12 +483,15 @@ function getImageDrawRect(
   };
 }
 
-function getCanvasFilter(filters: WorkspaceState['filters']) {
-  const blur = Math.max(0, filters.blur);
+function getCanvasFilter(filters: WorkspaceState['filters'], renderScale = 1) {
+  if (!filters.enabled) return 'none';
+
+  const blur = Math.max(0, filters.blur) * renderScale;
   const brightness = Math.max(0, 100 + filters.exposure);
   const contrast = Math.max(0, 100 + filters.contrast);
+  const saturation = Math.max(0, filters.saturation);
 
-  return `blur(${blur}px) brightness(${brightness}%) contrast(${contrast}%)`;
+  return `blur(${blur}px) brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
 }
 
 function drawReferenceImage(
@@ -497,21 +501,31 @@ function drawReferenceImage(
   canvasWidth: number,
   canvasHeight: number,
   state: WorkspaceState,
+  renderScale: number,
 ) {
   ctx.save();
-  ctx.filter = state.filters.showOriginal ? 'none' : getCanvasFilter(state.filters);
+  ctx.filter = state.filters.showOriginal ? 'none' : getCanvasFilter(state.filters, renderScale);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(image, imageRect.x, imageRect.y, imageRect.width, imageRect.height);
   ctx.restore();
 
-  if (state.filters.showOriginal || !shouldApplyValues(state.values)) return;
+  if (state.filters.showOriginal) return;
+
+  const shouldApplyTonalFilters = hasTonalFilterAdjustments(state.filters);
+  const shouldApplyValueMap = shouldApplyValues(state.values);
+  if (!shouldApplyTonalFilters && !shouldApplyValueMap) return;
 
   const visibleRect = getVisibleImageDataRect(imageRect, canvasWidth, canvasHeight);
   if (!visibleRect) return;
 
   const imageData = ctx.getImageData(visibleRect.x, visibleRect.y, visibleRect.width, visibleRect.height);
-  applyValuesToImageData(imageData, state.values);
+  if (shouldApplyTonalFilters) {
+    applyTonalFilterAdjustments(imageData, state.filters);
+  }
+  if (shouldApplyValueMap) {
+    applyValuesToImageData(imageData, state.values);
+  }
   ctx.putImageData(imageData, visibleRect.x, visibleRect.y);
 }
 
@@ -526,6 +540,51 @@ function getVisibleImageDataRect(imageRect: ImageDrawRect, canvasWidth: number, 
   if (width <= 0 || height <= 0) return null;
 
   return { x, y, width, height };
+}
+
+function hasTonalFilterAdjustments(filters: WorkspaceState['filters']) {
+  return filters.enabled && (filters.highlights !== 0 || filters.shadows !== 0);
+}
+
+function applyTonalFilterAdjustments(imageData: ImageData, filters: WorkspaceState['filters']) {
+  if (!hasTonalFilterAdjustments(filters)) return;
+
+  const highlightAdjustment = filters.highlights / 100;
+  const shadowAdjustment = filters.shadows / 100;
+  const { data } = imageData;
+
+  for (let index = 0; index < data.length; index += 4) {
+    const red = data[index];
+    const green = data[index + 1];
+    const blue = data[index + 2];
+    const luma = (red * 0.2126 + green * 0.7152 + blue * 0.0722) / 255;
+    const shadowWeight = 1 - smoothStep(0.18, 0.68, luma);
+    const highlightWeight = smoothStep(0.38, 0.88, luma);
+
+    data[index] = adjustToneChannel(red, shadowAdjustment, shadowWeight);
+    data[index + 1] = adjustToneChannel(green, shadowAdjustment, shadowWeight);
+    data[index + 2] = adjustToneChannel(blue, shadowAdjustment, shadowWeight);
+
+    data[index] = adjustToneChannel(data[index], highlightAdjustment, highlightWeight);
+    data[index + 1] = adjustToneChannel(data[index + 1], highlightAdjustment, highlightWeight);
+    data[index + 2] = adjustToneChannel(data[index + 2], highlightAdjustment, highlightWeight);
+  }
+}
+
+function adjustToneChannel(channel: number, adjustment: number, weight: number) {
+  const strength = adjustment * weight * 0.72;
+  const nextValue = strength >= 0 ? channel + (255 - channel) * strength : channel + channel * strength;
+
+  return clampByte(nextValue);
+}
+
+function smoothStep(edge0: number, edge1: number, value: number) {
+  const normalized = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return normalized * normalized * (3 - 2 * normalized);
+}
+
+function clampByte(value: number) {
+  return Math.round(clamp(value, 0, 255));
 }
 
 function sampleImageColor(
@@ -556,6 +615,7 @@ function sampleImageColor(
 
   const sampleImageData = sampleContext.getImageData(0, 0, sampleSize, sampleSize);
   if (useFilteredSource) {
+    applyTonalFilterAdjustments(sampleImageData, state.filters);
     applyValuesToImageData(sampleImageData, state.values);
   }
 

@@ -1,19 +1,24 @@
 import {
+  Aperture,
   ArrowLeft,
+  CloudSun,
   Contrast,
   Crop,
   Download,
+  Droplets,
   Eye,
   EyeOff,
   Grid2X2,
   Image as ImageIcon,
   Minus,
+  Moon,
   Palette as PaletteIcon,
   Pipette,
   Plus,
   RectangleHorizontal,
   RectangleVertical,
   SlidersHorizontal,
+  Sun,
   X,
   ZoomIn,
 } from 'lucide-react';
@@ -328,9 +333,13 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
   function resetFilters() {
     updateFilters({
+      enabled: false,
       blur: 0,
       exposure: 0,
       contrast: 0,
+      highlights: 0,
+      shadows: 0,
+      saturation: 100,
       showOriginal: false,
     });
   }
@@ -370,6 +379,20 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
           onClick={() => updateValues({ enabled: !state.values.enabled })}
         >
           {state.values.enabled ? <Eye size={16} /> : <EyeOff size={16} />}
+        </button>
+      );
+    }
+
+    if (tool === 'filters') {
+      return (
+        <button
+          type="button"
+          className="icon-button compact visibility-button"
+          title={state.filters.enabled ? 'Hide filters' : 'Show filters'}
+          data-visible={state.filters.enabled}
+          onClick={() => updateFilters({ enabled: !state.filters.enabled })}
+        >
+          {state.filters.enabled ? <Eye size={16} /> : <EyeOff size={16} />}
         </button>
       );
     }
@@ -727,55 +750,106 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
         {activeTool === 'filters' ? (
           <div className="tool-panel-content">
-            <label className="toggle-row">
-              <span>Show original</span>
-              <input
-                type="checkbox"
-                checked={state.filters.showOriginal}
-                onChange={(event) => updateFilters({ showOriginal: event.target.checked })}
-              />
-            </label>
-
-            <label className="slider-row" data-active-slider={activeSlider === 'filters-squint'}>
-              <span>Squint</span>
-              <input
-                type="range"
-                min="0"
-                max="12"
-                step="0.5"
-                value={state.filters.blur}
-                onChange={(event) => updateFilters({ blur: Number(event.target.value) })}
-                {...getSliderProps('filters-squint')}
-              />
-              <strong>{state.filters.blur}px</strong>
-            </label>
-
-            <label className="slider-row" data-active-slider={activeSlider === 'filters-exposure'}>
-              <span>Exposure</span>
+            <label className="slider-row filter-slider-row" data-active-slider={activeSlider === 'filters-exposure'}>
+              <span>
+                <Sun size={15} />
+                Exposure
+              </span>
               <input
                 type="range"
                 min="-60"
                 max="60"
                 step="1"
                 value={state.filters.exposure}
-                onChange={(event) => updateFilters({ exposure: Number(event.target.value) })}
+                onChange={(event) => updateFilters({ enabled: true, exposure: Number(event.target.value) })}
                 {...getSliderProps('filters-exposure')}
               />
               <strong>{state.filters.exposure}</strong>
             </label>
 
-            <label className="slider-row" data-active-slider={activeSlider === 'filters-contrast'}>
-              <span>Contrast</span>
+            <label className="slider-row filter-slider-row" data-active-slider={activeSlider === 'filters-contrast'}>
+              <span>
+                <Contrast size={15} />
+                Contrast
+              </span>
               <input
                 type="range"
                 min="-60"
                 max="80"
                 step="1"
                 value={state.filters.contrast}
-                onChange={(event) => updateFilters({ contrast: Number(event.target.value) })}
+                onChange={(event) => updateFilters({ enabled: true, contrast: Number(event.target.value) })}
                 {...getSliderProps('filters-contrast')}
               />
               <strong>{state.filters.contrast}</strong>
+            </label>
+
+            <label className="slider-row filter-slider-row" data-active-slider={activeSlider === 'filters-highlights'}>
+              <span>
+                <CloudSun size={15} />
+                Highlights
+              </span>
+              <input
+                type="range"
+                min="-80"
+                max="80"
+                step="1"
+                value={state.filters.highlights}
+                onChange={(event) => updateFilters({ enabled: true, highlights: Number(event.target.value) })}
+                {...getSliderProps('filters-highlights')}
+              />
+              <strong>{state.filters.highlights}</strong>
+            </label>
+
+            <label className="slider-row filter-slider-row" data-active-slider={activeSlider === 'filters-shadows'}>
+              <span>
+                <Moon size={15} />
+                Shadows
+              </span>
+              <input
+                type="range"
+                min="-80"
+                max="80"
+                step="1"
+                value={state.filters.shadows}
+                onChange={(event) => updateFilters({ enabled: true, shadows: Number(event.target.value) })}
+                {...getSliderProps('filters-shadows')}
+              />
+              <strong>{state.filters.shadows}</strong>
+            </label>
+
+            <label className="slider-row filter-slider-row" data-active-slider={activeSlider === 'filters-saturation'}>
+              <span>
+                <Droplets size={15} />
+                Saturation
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="180"
+                step="1"
+                value={state.filters.saturation}
+                onChange={(event) => updateFilters({ enabled: true, saturation: Number(event.target.value) })}
+                {...getSliderProps('filters-saturation')}
+              />
+              <strong>{state.filters.saturation}%</strong>
+            </label>
+
+            <label className="slider-row filter-slider-row" data-active-slider={activeSlider === 'filters-blur'}>
+              <span>
+                <Aperture size={15} />
+                Blur
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="12"
+                step="0.5"
+                value={state.filters.blur}
+                onChange={(event) => updateFilters({ enabled: true, blur: Number(event.target.value) })}
+                {...getSliderProps('filters-blur')}
+              />
+              <strong>{state.filters.blur}px</strong>
             </label>
 
             <button type="button" className="secondary-button" onClick={resetFilters}>
@@ -832,6 +906,16 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
         <button
           type="button"
           className="top-icon-button"
+          title={state.filters.showOriginal ? 'Show edited image' : 'Show original image'}
+          data-active={state.filters.showOriginal}
+          onClick={() => updateFilters({ showOriginal: !state.filters.showOriginal })}
+          disabled={!state.image}
+        >
+          {state.filters.showOriginal ? <Eye size={19} /> : <EyeOff size={19} />}
+        </button>
+        <button
+          type="button"
+          className="top-icon-button"
           title="Export image"
           onClick={() => canvasRef.current && exportCanvas(canvasRef.current)}
           disabled={!state.image}
@@ -866,43 +950,42 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
         />
       </div>
 
-      {!isPaletteSampling ? (
-        <section
-          className="tool-dock"
-          data-open={Boolean(activeTool)}
-          data-sliding={Boolean(activeSlider)}
-          aria-label="Editing tools"
-        >
-          {renderSheet()}
+      <section
+        className="tool-dock"
+        data-open={Boolean(activeTool)}
+        data-sliding={Boolean(activeSlider)}
+        data-sampling={isPaletteSampling}
+        aria-label="Editing tools"
+      >
+        {!isPaletteSampling ? renderSheet() : null}
 
-          <nav className="tool-strip" aria-label="Tool categories">
-            <button type="button" data-active={activeTool === 'canvas'} onClick={() => toggleTool('canvas')}>
-              <Crop size={19} />
-              <span>Canvas</span>
-            </button>
-            <button type="button" data-active={activeTool === 'zoom'} onClick={() => toggleTool('zoom')}>
-              <ZoomIn size={19} />
-              <span>Zoom</span>
-            </button>
-            <button type="button" data-active={activeTool === 'grid'} onClick={() => toggleTool('grid')}>
-              <Grid2X2 size={19} />
-              <span>Grid</span>
-            </button>
-            <button type="button" data-active={activeTool === 'values'} onClick={() => toggleTool('values')}>
-              <Contrast size={19} />
-              <span>Values</span>
-            </button>
-            <button type="button" data-active={activeTool === 'palette'} onClick={() => toggleTool('palette')}>
-              <PaletteIcon size={19} />
-              <span>Palette</span>
-            </button>
-            <button type="button" data-active={activeTool === 'filters'} onClick={() => toggleTool('filters')}>
-              <SlidersHorizontal size={19} />
-              <span>Filters</span>
-            </button>
-          </nav>
-        </section>
-      ) : null}
+        <nav className="tool-strip" aria-label="Tool categories">
+          <button type="button" data-active={activeTool === 'canvas'} onClick={() => toggleTool('canvas')}>
+            <Crop size={19} />
+            <span>Canvas</span>
+          </button>
+          <button type="button" data-active={activeTool === 'zoom'} onClick={() => toggleTool('zoom')}>
+            <ZoomIn size={19} />
+            <span>Zoom</span>
+          </button>
+          <button type="button" data-active={activeTool === 'grid'} onClick={() => toggleTool('grid')}>
+            <Grid2X2 size={19} />
+            <span>Grid</span>
+          </button>
+          <button type="button" data-active={activeTool === 'values'} onClick={() => toggleTool('values')}>
+            <Contrast size={19} />
+            <span>Values</span>
+          </button>
+          <button type="button" data-active={activeTool === 'palette'} onClick={() => toggleTool('palette')}>
+            <PaletteIcon size={19} />
+            <span>Palette</span>
+          </button>
+          <button type="button" data-active={activeTool === 'filters'} onClick={() => toggleTool('filters')}>
+            <SlidersHorizontal size={19} />
+            <span>Filters</span>
+          </button>
+        </nav>
+      </section>
     </main>
   );
 }

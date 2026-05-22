@@ -7,8 +7,12 @@ export type ReferenceImage = {
   src: string;
   thumbnailSrc?: string;
   category?: string;
+  description?: string;
+  suggestedUse?: string;
+  artist?: string;
+  year?: string;
+  sourceUrl?: string;
   tags?: string[];
   credit?: string;
   rights?: string;
 };
-

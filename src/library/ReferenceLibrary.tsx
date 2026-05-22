@@ -1,5 +1,5 @@
-import { Bookmark, Grid2X2, ImagePlus, Plus, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, Bookmark, Grid2X2, ImagePlus, Plus, Upload, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { ReferenceImage } from './referenceTypes';
 
 type ReferenceLibraryProps = {
@@ -11,6 +11,26 @@ type ReferenceLibraryProps = {
 
 type LibraryTab = 'upload' | 'library' | 'saved';
 
+type LibraryCategory = {
+  id: string;
+  label: string;
+  description: string;
+  tags?: string[];
+};
+
+const libraryCategories: LibraryCategory[] = [
+  { id: 'all', label: 'All', description: 'Every reference in the library.' },
+  { id: 'bargue', label: 'Bargue', description: 'Academic plates for accuracy, proportion, and value.', tags: ['bargue', 'academic'] },
+  { id: 'drawing', label: 'Drawing', description: 'Line, proportion, block-in, and careful copy references.', tags: ['drawing'] },
+  { id: 'technical', label: 'Technical', description: 'Structured studies for measurement, transfer, and accuracy.', tags: ['technical'] },
+  { id: 'portrait', label: 'Portrait', description: 'Heads and portraits for likeness, color, and planes.', tags: ['portrait'] },
+  { id: 'figure', label: 'Figure', description: 'Full figure studies, gesture, anatomy, and rhythm.', tags: ['figure'] },
+  { id: 'landscape', label: 'Landscape', description: 'Outdoor references for light, atmosphere, and composition.', tags: ['landscape'] },
+  { id: 'still-life', label: 'Still life', description: 'Objects, casts, and setups for observation.', tags: ['still-life'] },
+  { id: 'color', label: 'Color', description: 'References suited to color mixing and palette studies.', tags: ['color'] },
+  { id: 'value', label: 'Value', description: 'References with clear light and shadow families.', tags: ['value'] },
+];
+
 export function ReferenceLibrary({
   references,
   selectedImage,
@@ -18,6 +38,22 @@ export function ReferenceLibrary({
   onUploadImage,
 }: ReferenceLibraryProps) {
   const [activeTab, setActiveTab] = useState<LibraryTab>('upload');
+  const [activeCategoryId, setActiveCategoryId] = useState('all');
+  const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
+
+  const availableCategories = useMemo(() => {
+    return libraryCategories
+      .map((category) => ({
+        ...category,
+        count: getReferencesForCategory(references, category).length,
+      }))
+      .filter((category) => category.id === 'all' || category.count > 0);
+  }, [references]);
+
+  const activeCategory = availableCategories.find((category) => category.id === activeCategoryId) ?? availableCategories[0];
+  const categoryReferences = getReferencesForCategory(references, activeCategory);
+  const featuredReferences = references.filter((reference) => reference.tags?.includes('featured'));
+  const suggestedReferences = (featuredReferences.length ? featuredReferences : references).slice(0, 4);
 
   function handleUpload(file: File | undefined) {
     if (!file) return;
@@ -35,9 +71,19 @@ export function ReferenceLibrary({
     });
   }
 
-  function renderReferenceGrid(items = references) {
+  function openLibraryPreview(reference: ReferenceImage) {
+    setPreviewImage(reference);
+  }
+
+  function usePreviewReference() {
+    if (!previewImage) return;
+
+    onSelectImage(previewImage);
+  }
+
+  function renderReferenceGrid(items: ReferenceImage[], density: 'compact' | 'regular' = 'regular') {
     return (
-      <div className="gallery-grid">
+      <div className="gallery-grid" data-density={density}>
         {items.map((reference) => {
           const isSelected = selectedImage?.id === reference.id;
 
@@ -46,12 +92,12 @@ export function ReferenceLibrary({
               className="gallery-card"
               data-selected={isSelected}
               key={reference.id}
-              onClick={() => onSelectImage(reference)}
+              onClick={() => openLibraryPreview(reference)}
             >
               <img src={reference.thumbnailSrc ?? reference.src} alt="" />
               <span>
                 <strong>{reference.title}</strong>
-                <small>{reference.rights}</small>
+                <small>{reference.artist ?? reference.category ?? reference.rights}</small>
               </span>
             </button>
           );
@@ -80,9 +126,9 @@ export function ReferenceLibrary({
         {activeTab === 'upload' ? (
           <div className="start-panel">
             <label className="upload-hero">
-              <ImagePlus size={28} />
+              <ImagePlus size={24} />
               <strong>Upload your reference</strong>
-              <span>Start a workspace from a photo or image file on your device.</span>
+              <span>Start with your own image, photo, or study reference.</span>
               <em>Choose image</em>
               <input
                 type="file"
@@ -96,29 +142,45 @@ export function ReferenceLibrary({
               <div className="gallery-section-heading">
                 <div>
                   <strong>Suggested studies</strong>
-                  <span>Bargue plates for proportion, value, and careful setup.</span>
+                  <span>Sargent, Bargue, and atelier-friendly references for classical study.</span>
                 </div>
                 <button type="button" onClick={() => setActiveTab('library')}>
-                  View all
+                  Browse
                 </button>
               </div>
-              <div className="suggested-strip">{renderReferenceGrid(references.slice(0, 3))}</div>
+              <div className="suggested-strip">{renderReferenceGrid(suggestedReferences, 'compact')}</div>
             </section>
           </div>
         ) : null}
 
         {activeTab === 'library' ? (
-          <>
-            <div className="gallery-filter-row">
-              <button type="button">
-                <span>Bargue Plates</span>
-                <span aria-hidden="true">⌄</span>
-              </button>
-              <span>{references.length} references</span>
+          <div className="library-panel">
+            <div className="library-intent">
+              <strong>Choose a study</strong>
+              <span>{activeCategory.description}</span>
             </div>
 
-            {renderReferenceGrid()}
-          </>
+            <div className="category-strip" aria-label="Library categories">
+              {availableCategories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  data-active={activeCategory.id === category.id}
+                  onClick={() => setActiveCategoryId(category.id)}
+                >
+                  <span>{category.label}</span>
+                  <small>{category.count}</small>
+                </button>
+              ))}
+            </div>
+
+            <div className="gallery-filter-row">
+              <strong>{activeCategory.label}</strong>
+              <span>{categoryReferences.length} references</span>
+            </div>
+
+            {renderReferenceGrid(categoryReferences)}
+          </div>
         ) : null}
 
         {activeTab === 'saved' ? (
@@ -144,6 +206,82 @@ export function ReferenceLibrary({
           <span>Saved</span>
         </button>
       </nav>
+
+      {previewImage ? (
+        <section className="reference-preview" aria-label="Reference preview" role="dialog" aria-modal="true">
+          <div className="reference-preview-topbar">
+            <button type="button" className="top-icon-button" title="Back to library" onClick={() => setPreviewImage(null)}>
+              <ArrowLeft size={20} />
+            </button>
+            <strong>Preview</strong>
+            <button type="button" className="top-icon-button" title="Close preview" onClick={() => setPreviewImage(null)}>
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="reference-preview-image">
+            <img src={previewImage.src} alt="" />
+          </div>
+
+          <div className="reference-preview-details">
+            <div>
+              <strong>{previewImage.title}</strong>
+              {previewImage.artist ? (
+                <small>
+                  {previewImage.artist}
+                  {previewImage.year ? `, ${previewImage.year}` : ''}
+                </small>
+              ) : null}
+              <span>{previewImage.description ?? previewImage.category ?? 'Library reference'}</span>
+            </div>
+
+            <div className="reference-preview-meta">
+              {previewImage.category ? <span>{previewImage.category}</span> : null}
+              {previewImage.rights ? <span>{previewImage.rights}</span> : null}
+              {previewImage.suggestedUse ? <span>{previewImage.suggestedUse}</span> : null}
+              {previewImage.sourceUrl ? (
+                <a
+                  href={previewImage.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={previewImage.sourceUrl}
+                  aria-label={`Open source for ${previewImage.title}`}
+                >
+                  Source
+                </a>
+              ) : null}
+            </div>
+
+            {previewImage.tags?.length ? (
+              <div className="reference-preview-tags">
+                {previewImage.tags.slice(0, 6).map((tag) => (
+                  <span key={tag}>{formatTag(tag)}</span>
+                ))}
+              </div>
+            ) : null}
+
+            <button type="button" className="primary-action-button" onClick={usePreviewReference}>
+              Use reference
+            </button>
+          </div>
+        </section>
+      ) : null}
     </main>
   );
+}
+
+function getReferencesForCategory(references: ReferenceImage[], category: LibraryCategory) {
+  if (category.id === 'all') return references;
+
+  return references.filter((reference) => {
+    const tags = reference.tags ?? [];
+    return category.tags?.some((tag) => tags.includes(tag) || reference.category?.toLowerCase().includes(tag));
+  });
+}
+
+function formatTag(tag: string) {
+  return tag
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
