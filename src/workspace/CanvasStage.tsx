@@ -61,6 +61,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const loadedImageRef = useRef<HTMLImageElement | null>(null);
     const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
     const lastViewPointerRef = useRef<{ x: number; y: number } | null>(null);
+    const activeSamplePointerRef = useRef<number | null>(null);
+    const lastSampleRef = useRef<ColorSample | null>(null);
     const isSpacePressedRef = useRef(false);
     const [isPanning, setIsPanning] = useState(false);
     const [isViewPanning, setIsViewPanning] = useState(false);
@@ -125,6 +127,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
     useEffect(() => {
       if (interactionMode !== 'sample') {
+        activeSamplePointerRef.current = null;
+        lastSampleRef.current = null;
         setSamplePreview(null);
       }
     }, [interactionMode]);
@@ -185,10 +189,11 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       };
     }
 
-    function handleSample(event: PointerEvent<HTMLCanvasElement>) {
+    function getSampleAtPointer(event: PointerEvent<HTMLCanvasElement>) {
       const canvas = event.currentTarget;
       const loadedImage = loadedImageRef.current;
-      if (!loadedImage) return;
+      const stageRect = stageRef.current?.getBoundingClientRect();
+      if (!loadedImage || !stageRect) return null;
 
       const point = getCanvasPoint(event);
       const imageRect = getImageDrawRect(canvas.width, canvas.height, loadedImage, state.viewport);
@@ -198,13 +203,22 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         point.y >= imageRect.y &&
         point.y <= imageRect.y + imageRect.height;
 
-      if (!isInsideImage) return;
+      if (!isInsideImage) return null;
 
       const imageX = ((point.x - imageRect.x) / imageRect.width) * loadedImage.naturalWidth;
       const imageY = ((point.y - imageRect.y) / imageRect.height) * loadedImage.naturalHeight;
       const rgb = sampleImageColor(loadedImage, imageX, imageY, state);
-
-      onSampleColor({
+      const loupeSize = 116;
+      const isTouchSample = isTouchSamplingPointer(event);
+      const left = isTouchSample
+        ? clamp(event.clientX - stageRect.left - loupeSize / 2, 12, Math.max(12, stageRect.width - loupeSize - 12))
+        : clamp(event.clientX - stageRect.left + 18, 12, Math.max(12, stageRect.width - loupeSize - 12));
+      const top = clamp(
+        event.clientY - stageRect.top - loupeSize - (isTouchSample ? 34 : 18),
+        12,
+        Math.max(12, stageRect.height - loupeSize - 12),
+      );
+      const sample: ColorSample = {
         hex: rgbToHex(rgb),
         rgb,
         source: state.palette.source,
@@ -213,42 +227,43 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
           x: Math.round(imageX),
           y: Math.round(imageY),
         },
-      });
+      };
+
+      return {
+        sample,
+        preview: {
+          canvasX: point.x,
+          canvasY: point.y,
+          left,
+          top,
+          hex: sample.hex,
+        },
+      };
     }
 
-    function updateSamplePreview(event: PointerEvent<HTMLCanvasElement>) {
-      const canvas = event.currentTarget;
-      const loadedImage = loadedImageRef.current;
-      const stageRect = stageRef.current?.getBoundingClientRect();
-      if (!loadedImage || !stageRect) return;
+    function updateSamplePreview(event: PointerEvent<HTMLCanvasElement>, clearWhenOutside = true) {
+      const result = getSampleAtPointer(event);
 
-      const point = getCanvasPoint(event);
-      const imageRect = getImageDrawRect(canvas.width, canvas.height, loadedImage, state.viewport);
-      const isInsideImage =
-        point.x >= imageRect.x &&
-        point.x <= imageRect.x + imageRect.width &&
-        point.y >= imageRect.y &&
-        point.y <= imageRect.y + imageRect.height;
+      if (!result) {
+        if (clearWhenOutside) {
+          lastSampleRef.current = null;
+          setSamplePreview(null);
+        }
 
-      if (!isInsideImage) {
-        setSamplePreview(null);
-        return;
+        return null;
       }
 
-      const imageX = ((point.x - imageRect.x) / imageRect.width) * loadedImage.naturalWidth;
-      const imageY = ((point.y - imageRect.y) / imageRect.height) * loadedImage.naturalHeight;
-      const rgb = sampleImageColor(loadedImage, imageX, imageY, state);
-      const loupeSize = 116;
-      const left = clamp(event.clientX - stageRect.left + 18, 12, Math.max(12, stageRect.width - loupeSize - 12));
-      const top = clamp(event.clientY - stageRect.top - loupeSize - 18, 12, Math.max(12, stageRect.height - loupeSize - 12));
+      lastSampleRef.current = result.sample;
+      setSamplePreview(result.preview);
 
-      setSamplePreview({
-        canvasX: point.x,
-        canvasY: point.y,
-        left,
-        top,
-        hex: rgbToHex(rgb),
-      });
+      return result.sample;
+    }
+
+    function commitSample(sample: ColorSample) {
+      onSampleColor(sample);
+      lastSampleRef.current = null;
+      activeSamplePointerRef.current = null;
+      setSamplePreview(null);
     }
 
     function drawSampleLoupe(canvasX: number, canvasY: number) {
@@ -292,8 +307,16 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       if (interactionMode === 'sample') {
         event.preventDefault();
-        updateSamplePreview(event);
-        handleSample(event);
+        event.stopPropagation();
+
+        const sample = updateSamplePreview(event, !isTouchSamplingPointer(event));
+        if (isTouchSamplingPointer(event)) {
+          activeSamplePointerRef.current = event.pointerId;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          return;
+        }
+
+        if (sample) commitSample(sample);
         return;
       }
 
@@ -326,7 +349,12 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       }
 
       if (interactionMode === 'sample') {
-        updateSamplePreview(event);
+        event.preventDefault();
+
+        const isActiveTouchSample = activeSamplePointerRef.current === event.pointerId;
+        if (isTouchSamplingPointer(event) && !isActiveTouchSample) return;
+
+        updateSamplePreview(event, !isActiveTouchSample);
         return;
       }
 
@@ -349,6 +377,24 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function endPan(event: PointerEvent<HTMLCanvasElement>) {
+      if (interactionMode === 'sample' && activeSamplePointerRef.current === event.pointerId) {
+        event.preventDefault();
+        const sample = updateSamplePreview(event, false) ?? lastSampleRef.current;
+
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+
+        if (sample) {
+          commitSample(sample);
+        } else {
+          activeSamplePointerRef.current = null;
+          setSamplePreview(null);
+        }
+
+        return;
+      }
+
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
@@ -357,6 +403,30 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       setIsPanning(false);
       lastViewPointerRef.current = null;
       setIsViewPanning(false);
+    }
+
+    function cancelPointer(event: PointerEvent<HTMLCanvasElement>) {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+
+      if (activeSamplePointerRef.current === event.pointerId) {
+        activeSamplePointerRef.current = null;
+        lastSampleRef.current = null;
+        setSamplePreview(null);
+      }
+
+      lastPointerRef.current = null;
+      setIsPanning(false);
+      lastViewPointerRef.current = null;
+      setIsViewPanning(false);
+    }
+
+    function handlePointerLeave(event: PointerEvent<HTMLCanvasElement>) {
+      if (activeSamplePointerRef.current === event.pointerId) return;
+
+      lastSampleRef.current = null;
+      setSamplePreview(null);
     }
 
     function handleWheel(event: WheelEvent<HTMLCanvasElement>) {
@@ -436,8 +506,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={endPan}
-              onPointerCancel={endPan}
-              onPointerLeave={() => setSamplePreview(null)}
+              onPointerCancel={cancelPointer}
+              onPointerLeave={handlePointerLeave}
               onWheel={handleWheel}
             />
           </div>
@@ -668,6 +738,10 @@ function sampleImageColor(
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function isTouchSamplingPointer(event: PointerEvent<HTMLCanvasElement>) {
+  return event.pointerType === 'touch' || event.pointerType === 'pen';
 }
 
 function applyBoxBlur(imageData: ImageData, radius: number) {

@@ -488,16 +488,12 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
     return (
       <div className="tool-sheet palette-board" onPointerDown={(event) => event.stopPropagation()}>
-        <div className="palette-board-header">
-          <strong>Palette</strong>
-          <button
-            type="button"
-            className="icon-button compact"
-            title="Collapse palette"
-            onClick={() => setIsPaletteExpanded(false)}
-          >
-            <Minimize2 size={16} />
+        <div className="tool-sheet-heading">
+          <button type="button" className="icon-button compact" title="Close tool" onClick={closeTool}>
+            <X size={16} />
           </button>
+          <strong>{getToolLabel('palette')}</strong>
+          {renderHeaderAction('palette')}
         </div>
 
         <div className="palette-board-grid">
