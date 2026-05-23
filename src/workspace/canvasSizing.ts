@@ -41,6 +41,18 @@ export function formatMeasurement(valueCm: number, unit: MeasurementUnit) {
   return value.toFixed(decimals).replace(/\.?0+$/, '');
 }
 
+export function findMatchingCanvasPreset(widthCm: number, heightCm: number) {
+  return canvasPresets.find((preset) => {
+    const presetWidthCm = convertToCm(preset.width, preset.unit);
+    const presetHeightCm = convertToCm(preset.height, preset.unit);
+
+    return (
+      dimensionsMatch(widthCm, heightCm, presetWidthCm, presetHeightCm) ||
+      dimensionsMatch(widthCm, heightCm, presetHeightCm, presetWidthCm)
+    );
+  });
+}
+
 export function getGridStep(unit: MeasurementUnit) {
   return unit === 'in' ? 0.25 : 0.5;
 }
@@ -70,6 +82,12 @@ export function getCanvasPixelSize(widthCm: number, heightCm: number, maxLongSid
     height,
     pixelsPerCm: width / widthCm,
   };
+}
+
+function dimensionsMatch(widthCm: number, heightCm: number, presetWidthCm: number, presetHeightCm: number) {
+  const toleranceCm = 0.06;
+
+  return Math.abs(widthCm - presetWidthCm) <= toleranceCm && Math.abs(heightCm - presetHeightCm) <= toleranceCm;
 }
 
 export function getGridLimits(widthCm: number, heightCm: number, unit: MeasurementUnit) {

@@ -34,6 +34,7 @@ import {
   canvasPresets,
   convertFromCm,
   convertToCm,
+  findMatchingCanvasPreset,
   formatMeasurement,
   getGridLimits,
   snapGridMeasurement,
@@ -87,6 +88,8 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   const isMeasuredGrid = gridGuideType === 'square';
   const gridSquareSize = convertFromCm(state.grid.squareSizeCm, state.grid.unit);
   const isPresetGridColor = gridColorPresets.some((preset) => preset.value === state.grid.color.toLowerCase());
+  const matchingCanvasPreset = findMatchingCanvasPreset(state.canvas.widthCm, state.canvas.heightCm);
+  const canvasPresetId = matchingCanvasPreset?.id ?? 'custom';
   const selectedSwatch =
     state.palette.swatches.find((swatch) => swatch.id === state.palette.selectedSwatchId) ??
     state.palette.swatches[state.palette.swatches.length - 1] ??
@@ -177,11 +180,18 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   }
 
   function updateCanvas(nextCanvas: Partial<WorkspaceState['canvas']>) {
+    const nextState = {
+      ...state.canvas,
+      ...nextCanvas,
+    };
+    const matchingPreset = findMatchingCanvasPreset(nextState.widthCm, nextState.heightCm);
+    const dimensionsChanged = nextCanvas.widthCm !== undefined || nextCanvas.heightCm !== undefined;
+
     onChange({
       ...state,
       canvas: {
-        ...state.canvas,
-        ...nextCanvas,
+        ...nextState,
+        presetId: matchingPreset?.id ?? (dimensionsChanged ? 'custom' : nextCanvas.presetId ?? nextState.presetId),
       },
     });
   }
@@ -557,7 +567,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
           <div className="tool-panel-content">
             <label className="control-row">
               <span>Preset</span>
-              <select value={state.canvas.presetId} onChange={(event) => selectPreset(event.target.value)}>
+              <select value={canvasPresetId} onChange={(event) => selectPreset(event.target.value)}>
                 <option value="custom">Custom</option>
                 {canvasPresets.map((preset) => (
                   <option key={preset.id} value={preset.id}>
