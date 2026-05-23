@@ -158,7 +158,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       }
 
       drawGridGuides(ctx, width, height, {
-        enabled: state.grid.enabled,
+        enabled: state.grid.enabled && !state.filters.showOriginal,
         type: state.grid.type,
         spacing: state.grid.squareSizeCm * pixelsPerCm,
         color: state.grid.color,

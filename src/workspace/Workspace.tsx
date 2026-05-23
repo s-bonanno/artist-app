@@ -10,7 +10,9 @@ import {
   EyeOff,
   Grid2X2,
   Image as ImageIcon,
+  Maximize2,
   Minus,
+  Minimize2,
   Moon,
   Palette as PaletteIcon,
   Pipette,
@@ -50,7 +52,6 @@ type ActiveTool = 'canvas' | 'zoom' | 'grid' | 'values' | 'palette' | 'filters';
 const sampleSizes: SampleSize[] = [1, 3, 5];
 const valueModes: Array<{ id: ValueMode; label: string }> = [
   { id: 'map', label: 'Map' },
-  { id: 'planes', label: 'Planes' },
   { id: 'grayscale', label: 'Gray' },
 ];
 const gridGuideTypes: Array<{ id: GridGuideType; label: string }> = [
@@ -66,8 +67,8 @@ const gridColorPresets = [
   { label: 'Blue', value: '#4aa3ff' },
   { label: 'Yellow', value: '#ffd84d' },
 ];
-const minValueDepth = 1;
-const maxValueDepth = 5;
+const minValueLevels = 2;
+const maxValueLevels = 16;
 const minViewportZoom = 0.2;
 const maxViewportZoom = 4;
 
@@ -76,6 +77,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
   const [isPaletteSampling, setIsPaletteSampling] = useState(false);
+  const [isPaletteExpanded, setIsPaletteExpanded] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
@@ -92,6 +94,8 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
     state.palette.swatches[state.palette.swatches.length - 1] ??
     null;
   const selectedHsl = selectedSwatch ? rgbToHsl(selectedSwatch.rgb) : null;
+  const isPaletteBoardOpen = activeTool === 'palette' && isPaletteExpanded;
+  const hasOpenToolPanel = Boolean(activeTool);
 
   useEffect(() => {
     if (!state.image?.src) {
@@ -125,12 +129,14 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   function closeTool() {
     setActiveSlider(null);
     setIsPaletteSampling(false);
+    setIsPaletteExpanded(false);
     setActiveTool(null);
   }
 
   function toggleTool(tool: ActiveTool) {
     setActiveSlider(null);
     setIsPaletteSampling(false);
+    setIsPaletteExpanded(false);
     setActiveTool((currentTool) => (currentTool === tool ? null : tool));
   }
 
@@ -231,11 +237,9 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
     const parsedValue = Number(value);
     if (!Number.isFinite(parsedValue)) return;
 
-    const depth = Math.min(maxValueDepth, Math.max(minValueDepth, Math.round(parsedValue)));
-    const levels = 2 ** depth;
     updateValues({
       enabled: true,
-      levels,
+      levels: parsedValue,
     });
   }
 
@@ -392,6 +396,10 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
     });
   }
 
+  function startPaletteSampling() {
+    setIsPaletteSampling(true);
+  }
+
   function resetFilters() {
     updateFilters({
       enabled: false,
@@ -459,11 +467,78 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
       );
     }
 
+    if (tool === 'palette') {
+      return (
+        <button
+          type="button"
+          className="icon-button compact"
+          title={isPaletteExpanded ? 'Collapse palette' : 'Expand palette'}
+          onClick={() => setIsPaletteExpanded((isExpanded) => !isExpanded)}
+        >
+          {isPaletteExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+        </button>
+      );
+    }
+
     return <span aria-hidden="true" />;
+  }
+
+  function renderExpandedPaletteSheet() {
+    if (!isPaletteExpanded || activeTool !== 'palette') return null;
+
+    return (
+      <div className="tool-sheet palette-board" onPointerDown={(event) => event.stopPropagation()}>
+        <div className="palette-board-header">
+          <strong>Palette</strong>
+          <button
+            type="button"
+            className="icon-button compact"
+            title="Collapse palette"
+            onClick={() => setIsPaletteExpanded(false)}
+          >
+            <Minimize2 size={16} />
+          </button>
+        </div>
+
+        <div className="palette-board-grid">
+          {state.palette.swatches.length ? (
+            state.palette.swatches.map((swatch) => (
+              <button
+                key={swatch.id}
+                type="button"
+                className="palette-board-chip"
+                title={swatch.hex}
+                style={{ backgroundColor: swatch.hex }}
+                data-active={selectedSwatch?.id === swatch.id}
+                onClick={() => updatePalette({ selectedSwatchId: swatch.id })}
+              />
+            ))
+          ) : (
+            <div className="palette-board-empty">No swatches yet</div>
+          )}
+        </div>
+
+        <div className="palette-board-focus" style={{ backgroundColor: selectedSwatch?.hex ?? '#2a2b30' }} />
+
+        <div className="palette-board-detail">
+          <div>
+            <strong>{selectedSwatch?.hex ?? 'No swatch selected'}</strong>
+            {selectedSwatch ? <span>RGB {selectedSwatch.rgb.join(' ')}</span> : <span>Palette board</span>}
+          </div>
+          <button type="button" className="secondary-button" onClick={startPaletteSampling} disabled={!state.image}>
+            Sample
+          </button>
+          <button type="button" className="secondary-button" onClick={removeSelectedSwatch} disabled={!selectedSwatch}>
+            Remove
+          </button>
+        </div>
+      </div>
+    );
   }
 
   function renderSheet() {
     if (!activeTool) return null;
+    if (isPaletteBoardOpen) return renderExpandedPaletteSheet();
 
     return (
       <div className="tool-sheet">
@@ -675,7 +750,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
           <div className="tool-panel-content">
             <div className="option-block">
               <span>Mode</span>
-              <div className="chip-control" data-options="3" aria-label="Values mode">
+              <div className="chip-control" data-options="2" aria-label="Values mode">
                 {valueModes.map((mode) => (
                   <button
                     key={mode.id}
@@ -705,13 +780,13 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
             {state.values.mode !== 'grayscale' ? (
               <label className="slider-row" data-active-slider={activeSlider === 'values-levels'}>
-                <span>{state.values.mode === 'planes' ? 'Groups' : 'Levels'}</span>
+                <span>Levels</span>
                 <input
                   type="range"
-                  min={minValueDepth}
-                  max={maxValueDepth}
+                  min={minValueLevels}
+                  max={maxValueLevels}
                   step="1"
-                  value={getValueDepth(state.values.levels)}
+                  value={normalizeValueLevels(state.values.levels)}
                   onChange={(event) => setValueLevels(event.target.value)}
                   {...getSliderProps('values-levels')}
                 />
@@ -739,7 +814,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
           </div>
         ) : null}
 
-        {activeTool === 'palette' ? (
+        {activeTool === 'palette' && !isPaletteExpanded ? (
           <div className="tool-panel-content">
             <div className="chip-control" aria-label="Palette sample source">
               <button
@@ -762,7 +837,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               <button
                 type="button"
                 className="sample-mode-button"
-                onClick={() => setIsPaletteSampling(true)}
+                onClick={startPaletteSampling}
                 disabled={!state.image}
               >
                 <Pipette size={16} />
@@ -973,7 +1048,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   }
 
   return (
-    <main className="edit-screen" data-tool-open={Boolean(activeTool)}>
+    <main className="edit-screen" data-tool-open={hasOpenToolPanel}>
       <header className="edit-topbar">
         <button type="button" className="top-icon-button" title="Back to library" onClick={onBack}>
           <ArrowLeft size={20} />
@@ -987,12 +1062,12 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
         <button
           type="button"
           className="top-icon-button"
-          title={state.filters.showOriginal ? 'Show edited image' : 'Show original image'}
+          title={state.filters.showOriginal ? 'Viewing original image' : 'Viewing edited image'}
           data-active={state.filters.showOriginal}
           onClick={() => updateFilters({ showOriginal: !state.filters.showOriginal })}
           disabled={!state.image}
         >
-          {state.filters.showOriginal ? <Eye size={19} /> : <EyeOff size={19} />}
+          {state.filters.showOriginal ? <EyeOff size={19} /> : <Eye size={19} />}
         </button>
         <button
           type="button"
@@ -1038,7 +1113,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
       <section
         className="tool-dock"
-        data-open={Boolean(activeTool)}
+        data-open={hasOpenToolPanel}
         data-sliding={Boolean(activeSlider)}
         data-sampling={isPaletteSampling}
         aria-label="Editing tools"
@@ -1124,10 +1199,5 @@ function getToolLabel(tool: ActiveTool) {
 }
 
 function normalizeValueLevels(levels: number) {
-  return 2 ** getValueDepth(levels);
-}
-
-function getValueDepth(levels: number) {
-  const depth = Math.round(Math.log2(Math.max(2, levels)));
-  return Math.min(maxValueDepth, Math.max(minValueDepth, depth));
+  return Math.min(maxValueLevels, Math.max(minValueLevels, Math.round(levels)));
 }

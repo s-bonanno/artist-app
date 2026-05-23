@@ -4,10 +4,20 @@ const LUMINANCE_RED = 0.2126;
 const LUMINANCE_GREEN = 0.7152;
 const LUMINANCE_BLUE = 0.0722;
 const MIN_NOTAN_LEVELS = 2;
-const MAX_NOTAN_LEVELS = 32;
+const MAX_NOTAN_LEVELS = 16;
 
 type RgbaColor = [number, number, number, number];
-type RgbColor = [number, number, number];
+type TonalRange = {
+  start: number;
+  end: number;
+  split: number;
+  priority: number;
+};
+type ValueFamily = 'shadow' | 'light';
+type ValueLeaf = TonalRange & {
+  family: ValueFamily;
+  tone: number;
+};
 
 export function shouldApplyValues(values: ValueSettings) {
   return values.enabled && values.opacity > 0;
@@ -20,8 +30,7 @@ export function applyValuesToImageData(imageData: ImageData, values: ValueSettin
   const levels = normalizeNotanLevels(values.levels);
   const opacity = clamp(values.opacity, 0, 1);
   const sourceData = getSimplifiedData(data, imageData.width, imageData.height, values.simplify);
-  const mapThresholds = values.mode === 'grayscale' ? [] : calculateNotanThresholds(sourceData, levels);
-  const planeColors = values.mode === 'planes' ? calculatePlaneColors(sourceData, levels, mapThresholds) : null;
+  const valueScale = values.mode === 'grayscale' ? [] : calculateStableNotanScale(sourceData, levels);
 
   for (let index = 0; index < data.length; index += 4) {
     const alpha = data[index + 3];
@@ -37,12 +46,7 @@ export function applyValuesToImageData(imageData: ImageData, values: ValueSettin
     const target = getValueColor(
       values.mode,
       luminance,
-      levels,
-      mapThresholds,
-      planeColors,
-      sourceRed,
-      sourceGreen,
-      sourceBlue,
+      valueScale,
       alpha,
     );
 
@@ -58,12 +62,7 @@ export function applyValuesToImageData(imageData: ImageData, values: ValueSettin
 function getValueColor(
   mode: ValueSettings['mode'],
   luminance: number,
-  levels: number,
-  mapThresholds: number[],
-  planeColors: RgbColor[] | null,
-  sourceRed: number,
-  sourceGreen: number,
-  sourceBlue: number,
+  valueScale: ValueLeaf[],
   originalAlpha: number,
 ): RgbaColor {
   if (mode === 'grayscale') {
@@ -71,19 +70,11 @@ function getValueColor(
     return [tone, tone, tone, originalAlpha];
   }
 
-  if (mode === 'planes') {
-    const levelIndex = getNotanLevelIndex(luminance, levels, mapThresholds);
-    const planeColor = planeColors?.[levelIndex];
-    if (planeColor) return [planeColor[0], planeColor[1], planeColor[2], originalAlpha];
-
-    return [sourceRed, sourceGreen, sourceBlue, originalAlpha];
-  }
-
-  const tone = getNotanTone(luminance, levels, mapThresholds);
+  const tone = getStableValueTone(luminance, valueScale);
   return [tone, tone, tone, originalAlpha];
 }
 
-function calculateNotanThresholds(data: Uint8ClampedArray, levels: number) {
+function calculateStableNotanScale(data: Uint8ClampedArray, levels: number) {
   const histogram = new Array<number>(256).fill(0);
 
   for (let index = 0; index < data.length; index += 4) {
@@ -93,42 +84,140 @@ function calculateNotanThresholds(data: Uint8ClampedArray, levels: number) {
     histogram[clamp(luminance, 0, 255)] += 1;
   }
 
-  return calculateRecursiveNotanThresholds(histogram, levels);
+  return buildStableNotanScale(histogram, levels);
 }
 
-function calculatePlaneColors(data: Uint8ClampedArray, levels: number, thresholds: number[]) {
-  const totals = Array.from({ length: levels }, () => ({
-    red: 0,
-    green: 0,
-    blue: 0,
-    count: 0,
-  }));
+function buildStableNotanScale(histogram: number[], levels: number) {
+  const classes = normalizeNotanLevels(levels);
+  const lightShadowSplit = clamp(findOtsuSplit(histogram, 0, 255), 0, 254);
+  const leaves: ValueLeaf[] = [
+    createValueLeaf(histogram, 0, lightShadowSplit, 'shadow', 0),
+    createValueLeaf(histogram, lightShadowSplit + 1, 255, 'light', 255),
+  ];
 
-  for (let index = 0; index < data.length; index += 4) {
-    if (data[index + 3] === 0) continue;
-
-    const luminance = getLuminance(data[index], data[index + 1], data[index + 2]);
-    const levelIndex = getNotanLevelIndex(luminance, levels, thresholds);
-    const total = totals[levelIndex];
-
-    total.red += data[index];
-    total.green += data[index + 1];
-    total.blue += data[index + 2];
-    total.count += 1;
+  for (let visibleLevels = 3; visibleLevels <= classes; visibleLevels += 1) {
+    splitValueLeaf(leaves, histogram, visibleLevels % 2 === 1 ? 'light' : 'shadow');
   }
 
-  return totals.map<RgbColor>((total, index) => {
-    if (total.count === 0) {
-      const tone = Math.round((index / Math.max(1, levels - 1)) * 255);
-      return [tone, tone, tone];
-    }
+  return leaves.sort((first, second) => first.start - second.start);
+}
 
-    return [
-      Math.round(total.red / total.count),
-      Math.round(total.green / total.count),
-      Math.round(total.blue / total.count),
-    ];
-  });
+function splitValueLeaf(leaves: ValueLeaf[], histogram: number[], family: ValueFamily) {
+  const leafIndex = getNextLeafIndex(leaves, family);
+  if (leafIndex === -1) return;
+
+  const leaf = leaves[leafIndex];
+  const split = clamp(leaf.split, leaf.start, leaf.end - 1);
+  const sortedLeaves = [...leaves].sort((first, second) => first.start - second.start);
+  const sortedIndex = sortedLeaves.findIndex((sortedLeaf) => sortedLeaf === leaf);
+
+  if (family === 'shadow') {
+    const nextTone = getNextTone(sortedLeaves, sortedIndex);
+    const newTone = getMidTone(leaf.tone, nextTone === 255 ? 170 : nextTone);
+
+    leaves.splice(
+      leafIndex,
+      1,
+      createValueLeaf(histogram, leaf.start, split, family, leaf.tone),
+      createValueLeaf(histogram, split + 1, leaf.end, family, newTone),
+    );
+    return;
+  }
+
+  const previousTone = getPreviousTone(sortedLeaves, sortedIndex);
+  const newTone = getMidTone(previousTone, leaf.tone);
+
+  leaves.splice(
+    leafIndex,
+    1,
+    createValueLeaf(histogram, leaf.start, split, family, newTone),
+    createValueLeaf(histogram, split + 1, leaf.end, family, leaf.tone),
+  );
+}
+
+function getNextLeafIndex(leaves: ValueLeaf[], family: ValueFamily) {
+  let leafIndex = -1;
+  let bestPriority = Number.NEGATIVE_INFINITY;
+
+  for (let index = 0; index < leaves.length; index += 1) {
+    const leaf = leaves[index];
+    if (leaf.family !== family || leaf.end <= leaf.start || leaf.priority <= bestPriority) continue;
+
+    leafIndex = index;
+    bestPriority = leaf.priority;
+  }
+
+  return leafIndex;
+}
+
+function createValueLeaf(
+  histogram: number[],
+  start: number,
+  end: number,
+  family: ValueFamily,
+  tone: number,
+): ValueLeaf {
+  return {
+    ...createTonalRange(histogram, start, end),
+    family,
+    tone: clamp(Math.round(tone), 0, 255),
+  };
+}
+
+function getNextTone(leaves: ValueLeaf[], index: number) {
+  return leaves[index + 1]?.tone ?? 255;
+}
+
+function getPreviousTone(leaves: ValueLeaf[], index: number) {
+  return leaves[index - 1]?.tone ?? 0;
+}
+
+function getMidTone(first: number, second: number) {
+  return clamp(Math.round((first + second) / 2), 0, 255);
+}
+
+function createTonalRange(histogram: number[], start: number, end: number): TonalRange {
+  const safeStart = clamp(Math.round(start), 0, 255);
+  const safeEnd = clamp(Math.round(end), safeStart, 255);
+  const split =
+    safeEnd <= safeStart ? safeStart : clamp(findOtsuSplit(histogram, safeStart, safeEnd), safeStart, safeEnd - 1);
+
+  return {
+    start: safeStart,
+    end: safeEnd,
+    split,
+    priority: calculateRangePriority(histogram, safeStart, safeEnd),
+  };
+}
+
+function calculateRangePriority(histogram: number[], start: number, end: number) {
+  if (end <= start) return 0;
+
+  let total = 0;
+  let sum = 0;
+  let squaredSum = 0;
+
+  for (let value = start; value <= end; value += 1) {
+    const count = histogram[value];
+
+    total += count;
+    sum += count * value;
+    squaredSum += count * value * value;
+  }
+
+  if (total === 0) return end - start;
+
+  const mean = sum / total;
+  const variance = Math.max(0, squaredSum / total - mean * mean);
+
+  return variance * total;
+}
+
+function getStableValueTone(luminance: number, leaves: ValueLeaf[]) {
+  const value = clamp(Math.round(luminance), 0, 255);
+  const leaf = leaves.find((candidate) => value >= candidate.start && value <= candidate.end);
+
+  return leaf?.tone ?? (value <= 127 ? 0 : 255);
 }
 
 function getSimplifiedData(data: Uint8ClampedArray, width: number, height: number, amount: number) {
@@ -233,26 +322,6 @@ function blurVertical(
   }
 }
 
-function calculateRecursiveNotanThresholds(histogram: number[], levels: number) {
-  const classes = normalizeNotanLevels(levels);
-  const thresholds: number[] = [];
-  let ranges = [{ start: 0, end: 255 }];
-
-  while (ranges.length < classes) {
-    const nextRanges: Array<{ start: number; end: number }> = [];
-
-    for (const range of ranges) {
-      const split = findOtsuSplit(histogram, range.start, range.end);
-      thresholds.push(split);
-      nextRanges.push({ start: range.start, end: split }, { start: split + 1, end: range.end });
-    }
-
-    ranges = nextRanges;
-  }
-
-  return thresholds.sort((first, second) => first - second);
-}
-
 function findOtsuSplit(histogram: number[], start: number, end: number) {
   if (end - start <= 1) return start;
 
@@ -291,17 +360,6 @@ function findOtsuSplit(histogram: number[], start: number, end: number) {
   return bestSplit;
 }
 
-function getNotanTone(luminance: number, levels: number, thresholds: number[]) {
-  const levelIndex = getNotanLevelIndex(luminance, levels, thresholds);
-  return Math.round((levelIndex / Math.max(1, levels - 1)) * 255);
-}
-
-function getNotanLevelIndex(luminance: number, levels: number, thresholds: number[]) {
-  const value = clamp(Math.round(luminance), 0, 255);
-  const valueIndex = thresholds.findIndex((threshold) => value <= threshold);
-  return valueIndex === -1 ? levels - 1 : valueIndex;
-}
-
 function getLuminance(red: number, green: number, blue: number) {
   return LUMINANCE_RED * red + LUMINANCE_GREEN * green + LUMINANCE_BLUE * blue;
 }
@@ -315,7 +373,5 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function normalizeNotanLevels(levels: number) {
-  const depth = Math.round(Math.log2(Math.max(MIN_NOTAN_LEVELS, levels)));
-  const normalizedDepth = clamp(depth, 1, Math.log2(MAX_NOTAN_LEVELS));
-  return 2 ** normalizedDepth;
+  return clamp(Math.round(levels), MIN_NOTAN_LEVELS, MAX_NOTAN_LEVELS);
 }

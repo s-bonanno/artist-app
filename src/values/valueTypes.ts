@@ -1,4 +1,4 @@
-export type ValueMode = 'map' | 'planes' | 'grayscale';
+export type ValueMode = 'map' | 'grayscale';
 
 export type ValueSettings = {
   enabled: boolean;
