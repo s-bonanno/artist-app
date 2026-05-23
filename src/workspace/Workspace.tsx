@@ -65,7 +65,6 @@ const gridColorPresets = [
   { label: 'Black', value: '#111214' },
   { label: 'Red', value: '#ff3b5c' },
   { label: 'Blue', value: '#4aa3ff' },
-  { label: 'Yellow', value: '#ffd84d' },
 ];
 const minValueLevels = 2;
 const maxValueLevels = 16;
@@ -89,6 +88,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   const gridGuideType = state.grid.type ?? 'square';
   const isMeasuredGrid = gridGuideType === 'square';
   const gridSquareSize = convertFromCm(state.grid.squareSizeCm, state.grid.unit);
+  const isPresetGridColor = gridColorPresets.some((preset) => preset.value === state.grid.color.toLowerCase());
   const selectedSwatch =
     state.palette.swatches.find((swatch) => swatch.id === state.palette.selectedSwatchId) ??
     state.palette.swatches[state.palette.swatches.length - 1] ??
@@ -664,18 +664,18 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                     <option value="in">in</option>
                   </select>
                 </div>
-                <label className="inline-toggle" data-disabled={!isMeasuredGrid}>
-                  <span>Measurements</span>
-                  <input
-                    aria-label="Show grid measurements"
-                    type="checkbox"
-                    checked={Boolean(state.grid.showMeasurements)}
-                    disabled={!isMeasuredGrid}
-                    onChange={(event) => updateGrid({ showMeasurements: event.target.checked })}
-                  />
-                </label>
               </div>
             </div>
+
+            <label className="control-row measurement-toggle-row">
+              <span>Measure</span>
+              <input
+                aria-label="Show grid measurements"
+                type="checkbox"
+                checked={Boolean(state.grid.showMeasurements)}
+                onChange={(event) => updateGrid({ showMeasurements: event.target.checked })}
+              />
+            </label>
 
             {isMeasuredGrid ? (
               <label className="slider-row" data-active-slider={activeSlider === 'grid-scale'}>
@@ -739,14 +739,20 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                     <span style={{ backgroundColor: preset.value }} />
                   </button>
                 ))}
-                <input
-                  className="grid-color-picker"
-                  aria-label="Custom grid color"
-                  type="color"
+                <label
+                  className="grid-color-picker-label"
                   title="Custom color"
-                  value={state.grid.color}
-                  onChange={(event) => updateGrid({ color: event.target.value })}
-                />
+                  data-active={!isPresetGridColor}
+                >
+                  <span className="grid-color-picker-preview" />
+                  <input
+                    className="grid-color-picker-input"
+                    aria-label="Custom grid color"
+                    type="color"
+                    value={state.grid.color}
+                    onChange={(event) => updateGrid({ color: event.target.value })}
+                  />
+                </label>
               </div>
             </label>
           </div>

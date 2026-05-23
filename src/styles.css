@@ -1439,19 +1439,11 @@ button:disabled,
   white-space: nowrap;
 }
 
-.inline-toggle {
-  display: inline-grid;
-  grid-template-columns: auto 38px;
-  align-items: center;
-  gap: 8px;
-  min-width: max-content;
-  min-height: 36px;
-  color: #c9c9ce;
-  font-size: 12px;
-  font-weight: 500;
+.measurement-toggle-row {
+  grid-template-columns: 72px auto minmax(0, 1fr);
 }
 
-.inline-toggle input[type="checkbox"] {
+.measurement-toggle-row input[type="checkbox"] {
   -webkit-appearance: none;
   appearance: none;
   position: relative;
@@ -1467,7 +1459,7 @@ button:disabled,
     border-color 160ms ease;
 }
 
-.inline-toggle input[type="checkbox"]::before {
+.measurement-toggle-row input[type="checkbox"]::before {
   content: "";
   position: absolute;
   top: 3px;
@@ -1482,22 +1474,14 @@ button:disabled,
     transform 160ms ease;
 }
 
-.inline-toggle input[type="checkbox"]:checked {
+.measurement-toggle-row input[type="checkbox"]:checked {
   border-color: rgb(122 183 255 / 0.55);
   background: rgb(122 183 255 / 0.26);
 }
 
-.inline-toggle input[type="checkbox"]:checked::before {
+.measurement-toggle-row input[type="checkbox"]:checked::before {
   background: #f5f5f7;
   transform: translateX(16px);
-}
-
-.inline-toggle[data-disabled="true"] {
-  opacity: 0.42;
-}
-
-.inline-toggle input[type="checkbox"]:disabled {
-  cursor: not-allowed;
 }
 
 .dimension-row {
@@ -1516,7 +1500,7 @@ button:disabled,
 
 .measurement-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px;
+  grid-template-columns: minmax(0, 1fr) 64px;
   min-width: 0;
 }
 
@@ -1527,15 +1511,14 @@ button:disabled,
 .grid-guide-controls {
   display: grid;
   grid-column: 2 / -1;
-  grid-template-columns: minmax(118px, 1fr) minmax(112px, 132px) auto;
+  grid-template-columns: minmax(118px, 1fr) minmax(122px, 144px);
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
 .grid-guide-controls select,
-.grid-guide-controls .measurement-field,
-.grid-guide-controls .inline-toggle {
+.grid-guide-controls .measurement-field {
   grid-column: auto;
 }
 
@@ -1568,6 +1551,10 @@ input[type="number"] {
   background: rgb(255 255 255 / 0.07);
 }
 
+select {
+  padding-right: 30px;
+}
+
 .control-row select {
   grid-column: 2 / -1;
 }
@@ -1587,9 +1574,9 @@ input[type="number"] {
 }
 
 .measurement-field select {
-  width: 58px;
+  width: 64px;
   border-radius: 0 2px 2px 0;
-  padding: 0 7px;
+  padding: 0 24px 0 8px;
   color: #f5f5f7;
   background: rgb(255 255 255 / 0.1);
   font-size: 12px;
@@ -1604,17 +1591,21 @@ input[type="number"] {
   min-width: 0;
 }
 
-.grid-color-swatch {
+.grid-color-swatch,
+.grid-color-picker-label {
   display: inline-grid;
   place-items: center;
+  position: relative;
   width: 32px;
   height: 32px;
   border: 1px solid rgb(255 255 255 / 0.1);
   border-radius: 2px;
   background: rgb(255 255 255 / 0.06);
+  cursor: pointer;
 }
 
-.grid-color-swatch span {
+.grid-color-swatch span,
+.grid-color-picker-label span {
   width: 18px;
   height: 18px;
   border: 1px solid rgb(255 255 255 / 0.28);
@@ -1622,24 +1613,25 @@ input[type="number"] {
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.28);
 }
 
-.grid-color-swatch[data-active="true"] {
+.grid-color-picker-preview {
+  background: conic-gradient(from 90deg, #ff3b5c, #ffd84d, #4bd87f, #4aa3ff, #b46cff, #ff3b5c);
+}
+
+.grid-color-swatch[data-active="true"],
+.grid-color-picker-label[data-active="true"] {
   border-color: rgb(122 183 255 / 0.55);
   background: rgb(122 183 255 / 0.16);
 }
 
-input[type="color"] {
-  width: 42px;
-  height: 28px;
+.grid-color-picker-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   padding: 0;
-  border: 1px solid rgb(255 255 255 / 0.16);
-  border-radius: 2px;
-  background: transparent;
-}
-
-.grid-color-picker {
-  width: 32px;
-  height: 32px;
-  background: rgb(255 255 255 / 0.06);
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 input[type="range"] {
@@ -2264,6 +2256,10 @@ input[type="range"]::-moz-range-thumb {
 
   .grid-guide-row {
     grid-template-columns: 78px minmax(0, 1fr);
+  }
+
+  .measurement-toggle-row {
+    grid-template-columns: 78px auto minmax(0, 1fr);
   }
 
   .grid-guide-controls {
