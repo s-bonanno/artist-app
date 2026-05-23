@@ -22,7 +22,7 @@ import {
   X,
   ZoomIn,
 } from 'lucide-react';
-import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { WorkspaceState } from '../app/appState';
 import { exportCanvas } from '../export/exportCanvas';
 import type { GridGuideType } from '../grid/drawGrid';
@@ -50,8 +50,8 @@ type ActiveTool = 'canvas' | 'zoom' | 'grid' | 'values' | 'palette' | 'filters';
 const sampleSizes: SampleSize[] = [1, 3, 5];
 const valueModes: Array<{ id: ValueMode; label: string }> = [
   { id: 'map', label: 'Map' },
-  { id: 'shadows', label: 'Shadows' },
-  { id: 'lights', label: 'Lights' },
+  { id: 'planes', label: 'Planes' },
+  { id: 'grayscale', label: 'Gray' },
 ];
 const gridGuideTypes: Array<{ id: GridGuideType; label: string }> = [
   { id: 'square', label: 'Square grid' },
@@ -68,12 +68,15 @@ const gridColorPresets = [
 ];
 const minValueDepth = 1;
 const maxValueDepth = 5;
+const minViewportZoom = 0.2;
+const maxViewportZoom = 4;
 
 export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
   const [isPaletteSampling, setIsPaletteSampling] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
     [state.canvas.heightCm, state.canvas.widthCm, state.grid.unit],
@@ -89,6 +92,35 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
     state.palette.swatches[state.palette.swatches.length - 1] ??
     null;
   const selectedHsl = selectedSwatch ? rgbToHsl(selectedSwatch.rgb) : null;
+
+  useEffect(() => {
+    if (!state.image?.src) {
+      setImageDimensions(null);
+      return;
+    }
+
+    let isCurrentImage = true;
+    const image = new Image();
+
+    image.onload = () => {
+      if (!isCurrentImage) return;
+
+      setImageDimensions({
+        width: image.naturalWidth || image.width,
+        height: image.naturalHeight || image.height,
+      });
+    };
+
+    image.onerror = () => {
+      if (isCurrentImage) setImageDimensions(null);
+    };
+
+    image.src = state.image.src;
+
+    return () => {
+      isCurrentImage = false;
+    };
+  }, [state.image?.src]);
 
   function closeTool() {
     setActiveSlider(null);
@@ -181,6 +213,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
     };
     const levels = normalizeValueLevels(nextState.levels);
     const visibleLevels = Math.min(levels, Math.max(0, Math.round(nextState.visibleLevels)));
+    const simplify = Math.min(10, Math.max(0, Math.round(nextState.simplify)));
 
     onChange({
       ...state,
@@ -188,6 +221,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
         ...nextState,
         levels,
         visibleLevels,
+        simplify,
         opacity: Math.min(1, Math.max(0, nextState.opacity)),
       },
     });
@@ -235,7 +269,34 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   function stepZoom(direction: 'in' | 'out') {
     const multiplier = direction === 'in' ? 1.15 : 0.85;
     updateViewport({
-      zoom: Math.min(4, Math.max(0.2, state.viewport.zoom * multiplier)),
+      zoom: Math.min(maxViewportZoom, Math.max(minViewportZoom, state.viewport.zoom * multiplier)),
+    });
+  }
+
+  function fitReferenceToCanvas() {
+    updateViewport({ zoom: 1, panX: 0, panY: 0 });
+  }
+
+  function fillReferenceToCanvas() {
+    if (!imageDimensions) {
+      fitReferenceToCanvas();
+      return;
+    }
+
+    const fitScale = Math.min(
+      state.canvas.widthCm / imageDimensions.width,
+      state.canvas.heightCm / imageDimensions.height,
+    );
+    const fillScale = Math.max(
+      state.canvas.widthCm / imageDimensions.width,
+      state.canvas.heightCm / imageDimensions.height,
+    );
+    const fillZoom = fillScale / Math.max(fitScale, Number.EPSILON);
+
+    updateViewport({
+      zoom: Math.min(maxViewportZoom, Math.max(1, fillZoom)),
+      panX: 0,
+      panY: 0,
     });
   }
 
@@ -350,6 +411,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
       mode: 'map',
       levels: 4,
       visibleLevels: 3,
+      simplify: 0,
       opacity: 1,
     });
   }
@@ -627,19 +689,35 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               </div>
             </div>
 
-            <label className="slider-row" data-active-slider={activeSlider === 'values-levels'}>
-              <span>Levels</span>
+            <label className="slider-row" data-active-slider={activeSlider === 'values-simplify'}>
+              <span>Simplify</span>
               <input
                 type="range"
-                min={minValueDepth}
-                max={maxValueDepth}
+                min="0"
+                max="10"
                 step="1"
-                value={getValueDepth(state.values.levels)}
-                onChange={(event) => setValueLevels(event.target.value)}
-                {...getSliderProps('values-levels')}
+                value={state.values.simplify}
+                onChange={(event) => updateValues({ enabled: true, simplify: Number(event.target.value) })}
+                {...getSliderProps('values-simplify')}
               />
-              <strong>{normalizeValueLevels(state.values.levels)}</strong>
+              <strong>{state.values.simplify === 0 ? 'Off' : state.values.simplify}</strong>
             </label>
+
+            {state.values.mode !== 'grayscale' ? (
+              <label className="slider-row" data-active-slider={activeSlider === 'values-levels'}>
+                <span>{state.values.mode === 'planes' ? 'Groups' : 'Levels'}</span>
+                <input
+                  type="range"
+                  min={minValueDepth}
+                  max={maxValueDepth}
+                  step="1"
+                  value={getValueDepth(state.values.levels)}
+                  onChange={(event) => setValueLevels(event.target.value)}
+                  {...getSliderProps('values-levels')}
+                />
+                <strong>{normalizeValueLevels(state.values.levels)}</strong>
+              </label>
+            ) : null}
 
             <label className="slider-row" data-active-slider={activeSlider === 'values-opacity'}>
               <span>Opacity</span>
@@ -878,8 +956,11 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
               <button type="button" className="icon-button" title="Zoom out" onClick={() => stepZoom('out')}>
                 <Minus size={16} />
               </button>
-              <button type="button" className="secondary-button" onClick={() => updateViewport({ zoom: 1, panX: 0, panY: 0 })}>
+              <button type="button" className="secondary-button" onClick={fitReferenceToCanvas}>
                 Fit
+              </button>
+              <button type="button" className="secondary-button" onClick={fillReferenceToCanvas} disabled={!imageDimensions}>
+                Fill
               </button>
               <button type="button" className="icon-button" title="Zoom in" onClick={() => stepZoom('in')}>
                 <Plus size={16} />
@@ -892,7 +973,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   }
 
   return (
-    <main className="edit-screen">
+    <main className="edit-screen" data-tool-open={Boolean(activeTool)}>
       <header className="edit-topbar">
         <button type="button" className="top-icon-button" title="Back to library" onClick={onBack}>
           <ArrowLeft size={20} />
@@ -926,7 +1007,12 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
       <div
         className="edit-canvas-wrap"
-        onPointerDown={() => activeTool && activeTool !== 'palette' && activeTool !== 'zoom' && closeTool()}
+        onPointerDown={() => {
+          if (!activeTool || activeTool === 'zoom') return;
+          if (activeTool === 'palette' && isPaletteSampling) return;
+
+          closeTool();
+        }}
       >
         {isPaletteSampling ? (
           <div className="sampling-hint">
@@ -957,7 +1043,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
         data-sampling={isPaletteSampling}
         aria-label="Editing tools"
       >
-        {!isPaletteSampling ? renderSheet() : null}
+        {renderSheet()}
 
         <nav className="tool-strip" aria-label="Tool categories">
           <button type="button" data-active={activeTool === 'canvas'} onClick={() => toggleTool('canvas')}>

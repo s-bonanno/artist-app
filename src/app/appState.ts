@@ -83,6 +83,7 @@ export const initialWorkspaceState: WorkspaceState = {
     mode: 'map',
     levels: 4,
     visibleLevels: 3,
+    simplify: 0,
     opacity: 1,
   },
   palette: {
