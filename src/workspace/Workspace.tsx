@@ -783,20 +783,6 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
               </div>
             </div>
 
-            <label className="slider-row" data-active-slider={activeSlider === 'values-simplify'}>
-              <span>Simplify</span>
-              <input
-                type="range"
-                min="0"
-                max="10"
-                step="1"
-                value={state.values.simplify}
-                onChange={(event) => updateValues({ enabled: true, simplify: Number(event.target.value) })}
-                {...getSliderProps('values-simplify')}
-              />
-              <strong>{state.values.simplify === 0 ? 'Off' : state.values.simplify}</strong>
-            </label>
-
             {state.values.mode !== 'grayscale' ? (
               <label className="slider-row" data-active-slider={activeSlider === 'values-levels'}>
                 <span>Levels</span>
@@ -812,6 +798,20 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
                 <strong>{normalizeValueLevels(state.values.levels)}</strong>
               </label>
             ) : null}
+
+            <label className="slider-row" data-active-slider={activeSlider === 'values-simplify'}>
+              <span>Simplify</span>
+              <input
+                type="range"
+                min="0"
+                max="10"
+                step="1"
+                value={state.values.simplify}
+                onChange={(event) => updateValues({ enabled: true, simplify: Number(event.target.value) })}
+                {...getSliderProps('values-simplify')}
+              />
+              <strong>{state.values.simplify === 0 ? 'Off' : state.values.simplify}</strong>
+            </label>
 
             <label className="slider-row" data-active-slider={activeSlider === 'values-opacity'}>
               <span>Opacity</span>

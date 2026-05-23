@@ -36,6 +36,26 @@ type ViewTransform = {
   panY: number;
 };
 
+type PointerPosition = {
+  x: number;
+  y: number;
+};
+
+type ActivePointerPosition = PointerPosition & {
+  id: number;
+};
+
+type TouchGestureState = {
+  target: 'view' | 'image';
+  pointerIds: number[];
+  startDistance: number;
+  startClientCenter: PointerPosition;
+  startViewCenter: PointerPosition;
+  startCanvasCenter: PointerPosition;
+  startViewTransform: ViewTransform;
+  startViewport: WorkspaceState['viewport'];
+};
+
 type SamplePreview = {
   canvasX: number;
   canvasY: number;
@@ -62,6 +82,10 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const loadedImageRef = useRef<HTMLImageElement | null>(null);
     const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
     const lastViewPointerRef = useRef<{ x: number; y: number } | null>(null);
+    const touchPointersRef = useRef<Map<number, PointerPosition>>(new Map());
+    const touchGestureRef = useRef<TouchGestureState | null>(null);
+    const viewTransformRef = useRef<ViewTransform>(defaultViewTransform);
+    const viewportRef = useRef<WorkspaceState['viewport']>(state.viewport);
     const activeSamplePointerRef = useRef<number | null>(null);
     const lastSampleRef = useRef<ColorSample | null>(null);
     const isSpacePressedRef = useRef(false);
@@ -74,6 +98,14 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       viewTransform.zoom > 1.001 || Math.abs(viewTransform.panX) > 0.5 || Math.abs(viewTransform.panY) > 0.5;
 
     useImperativeHandle(forwardedRef, () => canvasRef.current as HTMLCanvasElement, []);
+
+    useEffect(() => {
+      viewportRef.current = state.viewport;
+    }, [state.viewport]);
+
+    useEffect(() => {
+      viewTransformRef.current = viewTransform;
+    }, [viewTransform]);
 
     useEffect(() => {
       const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -102,9 +134,29 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }, []);
 
     useEffect(() => {
-      setViewTransform(defaultViewTransform);
+      const handleDocumentWheel = (event: globalThis.WheelEvent) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+
+        const editScreen = stageRef.current?.closest('.edit-screen');
+        const target = event.target as Node | null;
+        if (!editScreen || !target || !editScreen.contains(target)) return;
+
+        event.preventDefault();
+      };
+
+      document.addEventListener('wheel', handleDocumentWheel, { capture: true, passive: false });
+
+      return () => {
+        document.removeEventListener('wheel', handleDocumentWheel, { capture: true });
+      };
+    }, []);
+
+    useEffect(() => {
+      applyViewTransform(defaultViewTransform);
       setIsViewPanning(false);
       lastViewPointerRef.current = null;
+      touchPointersRef.current.clear();
+      touchGestureRef.current = null;
     }, [image?.id, state.canvas.widthCm, state.canvas.heightCm]);
 
     useEffect(() => {
@@ -187,14 +239,28 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       };
     }
 
-    function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
-      const scale = getCanvasScale(event.currentTarget);
-      const rect = event.currentTarget.getBoundingClientRect();
+    function applyViewTransform(nextTransform: ViewTransform) {
+      viewTransformRef.current = nextTransform;
+      setViewTransform(nextTransform);
+    }
+
+    function applyViewport(nextViewport: WorkspaceState['viewport']) {
+      viewportRef.current = nextViewport;
+      onViewportChange(nextViewport);
+    }
+
+    function getCanvasPointFromClient(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+      const scale = getCanvasScale(canvas);
+      const rect = canvas.getBoundingClientRect();
 
       return {
-        x: (event.clientX - rect.left) * scale.x,
-        y: (event.clientY - rect.top) * scale.y,
+        x: (clientX - rect.left) * scale.x,
+        y: (clientY - rect.top) * scale.y,
       };
+    }
+
+    function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
+      return getCanvasPointFromClient(event.currentTarget, event.clientX, event.clientY);
     }
 
     function getSampleAtPointer(event: PointerEvent<HTMLCanvasElement>) {
@@ -274,6 +340,143 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       setSamplePreview(null);
     }
 
+    function getActiveTouchPointers(): ActivePointerPosition[] {
+      return Array.from(touchPointersRef.current, ([id, pointer]) => ({ id, ...pointer }));
+    }
+
+    function getPointerDistance(first: PointerPosition, second: PointerPosition) {
+      return Math.hypot(second.x - first.x, second.y - first.y);
+    }
+
+    function getPointerCenter(first: PointerPosition, second?: PointerPosition) {
+      if (!second) return first;
+
+      return {
+        x: (first.x + second.x) / 2,
+        y: (first.y + second.y) / 2,
+      };
+    }
+
+    function getStagePointFromClient(clientX: number, clientY: number) {
+      const stageRect = stageRef.current?.getBoundingClientRect();
+      if (!stageRect) return { x: 0, y: 0 };
+
+      return {
+        x: clientX - (stageRect.left + stageRect.width / 2),
+        y: clientY - (stageRect.top + stageRect.height / 2),
+      };
+    }
+
+    function startTouchGesture(canvas: HTMLCanvasElement) {
+      const pointers = getActiveTouchPointers();
+      if (!pointers.length) {
+        touchGestureRef.current = null;
+        setIsPanning(false);
+        setIsViewPanning(false);
+        return;
+      }
+
+      const [first, second] = pointers;
+      const center = getPointerCenter(first, second);
+      const target = interactionMode === 'pan' ? 'image' : 'view';
+
+      touchGestureRef.current = {
+        target,
+        pointerIds: second ? [first.id, second.id] : [first.id],
+        startDistance: second ? getPointerDistance(first, second) : 0,
+        startClientCenter: center,
+        startViewCenter: getStagePointFromClient(center.x, center.y),
+        startCanvasCenter: getCanvasPointFromClient(canvas, center.x, center.y),
+        startViewTransform: viewTransformRef.current,
+        startViewport: viewportRef.current,
+      };
+
+      setIsPanning(target === 'image');
+      setIsViewPanning(target === 'view');
+    }
+
+    function updateTouchGesture(canvas: HTMLCanvasElement) {
+      const pointers = getActiveTouchPointers();
+      if (!pointers.length) return;
+
+      const [first, second] = pointers;
+      const activePointerIds = second ? [first.id, second.id] : [first.id];
+      const expectedTarget = interactionMode === 'pan' ? 'image' : 'view';
+      const currentGesture = touchGestureRef.current;
+      const shouldRestartGesture =
+        !currentGesture ||
+        currentGesture.target !== expectedTarget ||
+        currentGesture.pointerIds.length !== activePointerIds.length ||
+        currentGesture.pointerIds.some((id, index) => id !== activePointerIds[index]);
+
+      if (shouldRestartGesture) {
+        startTouchGesture(canvas);
+        return;
+      }
+
+      const center = getPointerCenter(first, second);
+
+      if (!second) {
+        if (currentGesture.target === 'image') {
+          const currentCanvasCenter = getCanvasPointFromClient(canvas, center.x, center.y);
+
+          applyViewport({
+            ...currentGesture.startViewport,
+            panX: currentGesture.startViewport.panX + currentCanvasCenter.x - currentGesture.startCanvasCenter.x,
+            panY: currentGesture.startViewport.panY + currentCanvasCenter.y - currentGesture.startCanvasCenter.y,
+          });
+          return;
+        }
+
+        applyViewTransform({
+          ...currentGesture.startViewTransform,
+          panX: currentGesture.startViewTransform.panX + center.x - currentGesture.startClientCenter.x,
+          panY: currentGesture.startViewTransform.panY + center.y - currentGesture.startClientCenter.y,
+        });
+        return;
+      }
+
+      const currentDistance = getPointerDistance(first, second);
+      if (currentDistance <= 0 || currentGesture.startDistance <= 0) return;
+
+      const distanceRatio = currentDistance / currentGesture.startDistance;
+
+      if (currentGesture.target === 'image') {
+        const currentCanvasCenter = getCanvasPointFromClient(canvas, center.x, center.y);
+        const nextZoom = clamp(currentGesture.startViewport.zoom * distanceRatio, 0.2, 4);
+        const zoomRatio = nextZoom / currentGesture.startViewport.zoom;
+        const canvasCenterX = canvas.width / 2;
+        const canvasCenterY = canvas.height / 2;
+
+        applyViewport({
+          zoom: nextZoom,
+          panX:
+            currentCanvasCenter.x -
+            canvasCenterX -
+            (currentGesture.startCanvasCenter.x - canvasCenterX - currentGesture.startViewport.panX) * zoomRatio,
+          panY:
+            currentCanvasCenter.y -
+            canvasCenterY -
+            (currentGesture.startCanvasCenter.y - canvasCenterY - currentGesture.startViewport.panY) * zoomRatio,
+        });
+        return;
+      }
+
+      const currentViewCenter = getStagePointFromClient(center.x, center.y);
+      const nextZoom = clamp(currentGesture.startViewTransform.zoom * distanceRatio, minViewZoom, maxViewZoom);
+      const zoomRatio = nextZoom / currentGesture.startViewTransform.zoom;
+
+      applyViewTransform({
+        zoom: nextZoom,
+        panX:
+          currentViewCenter.x -
+          (currentGesture.startViewCenter.x - currentGesture.startViewTransform.panX) * zoomRatio,
+        panY:
+          currentViewCenter.y -
+          (currentGesture.startViewCenter.y - currentGesture.startViewTransform.panY) * zoomRatio,
+      });
+    }
+
     function drawSampleLoupe(canvasX: number, canvasY: number) {
       const canvas = canvasRef.current;
       const loupe = sampleLoupeRef.current;
@@ -301,7 +504,19 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
       if (!image) return;
 
-      if (isSpacePressedRef.current) {
+      if (event.pointerType === 'touch' && interactionMode !== 'sample') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        touchPointersRef.current.set(event.pointerId, {
+          x: event.clientX,
+          y: event.clientY,
+        });
+        startTouchGesture(event.currentTarget);
+        return;
+      }
+
+      if (isSpacePressedRef.current && interactionMode !== 'pan') {
         event.preventDefault();
         event.stopPropagation();
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -339,6 +554,17 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
+      if (touchPointersRef.current.has(event.pointerId)) {
+        event.preventDefault();
+        event.stopPropagation();
+        touchPointersRef.current.set(event.pointerId, {
+          x: event.clientX,
+          y: event.clientY,
+        });
+        updateTouchGesture(event.currentTarget);
+        return;
+      }
+
       if (isViewPanning && lastViewPointerRef.current) {
         const deltaX = event.clientX - lastViewPointerRef.current.x;
         const deltaY = event.clientY - lastViewPointerRef.current.y;
@@ -348,11 +574,11 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
           y: event.clientY,
         };
 
-        setViewTransform((current) => ({
-          ...current,
-          panX: current.panX + deltaX,
-          panY: current.panY + deltaY,
-        }));
+        applyViewTransform({
+          ...viewTransformRef.current,
+          panX: viewTransformRef.current.panX + deltaX,
+          panY: viewTransformRef.current.panY + deltaY,
+        });
         return;
       }
 
@@ -377,14 +603,27 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         y: event.clientY,
       };
 
-      onViewportChange({
-        ...state.viewport,
-        panX: state.viewport.panX + deltaX,
-        panY: state.viewport.panY + deltaY,
+      applyViewport({
+        ...viewportRef.current,
+        panX: viewportRef.current.panX + deltaX,
+        panY: viewportRef.current.panY + deltaY,
       });
     }
 
     function endPan(event: PointerEvent<HTMLCanvasElement>) {
+      if (touchPointersRef.current.has(event.pointerId)) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+
+        touchPointersRef.current.delete(event.pointerId);
+        startTouchGesture(event.currentTarget);
+        return;
+      }
+
       if (interactionMode === 'sample' && activeSamplePointerRef.current === event.pointerId) {
         event.preventDefault();
         const sample = updateSamplePreview(event, false) ?? lastSampleRef.current;
@@ -414,6 +653,16 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function cancelPointer(event: PointerEvent<HTMLCanvasElement>) {
+      if (touchPointersRef.current.has(event.pointerId)) {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+
+        touchPointersRef.current.delete(event.pointerId);
+        startTouchGesture(event.currentTarget);
+        return;
+      }
+
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
@@ -442,30 +691,34 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       if (event.metaKey || event.ctrlKey) {
         event.preventDefault();
-        zoomViewAtPoint(event);
+        if (interactionMode === 'pan') {
+          zoomImageAtPoint(event);
+        } else {
+          zoomViewAtPoint(event);
+        }
         return;
       }
 
       if (interactionMode !== 'pan') return;
 
       event.preventDefault();
+      zoomImageAtPoint(event);
+    }
 
+    function zoomImageAtPoint(event: WheelEvent<HTMLCanvasElement>) {
       const canvas = event.currentTarget;
-      const rect = canvas.getBoundingClientRect();
-      const scale = getCanvasScale(canvas);
-      const pointerX = (event.clientX - rect.left) * scale.x;
-      const pointerY = (event.clientY - rect.top) * scale.y;
-      const currentZoom = state.viewport.zoom;
+      const pointer = getCanvasPointFromClient(canvas, event.clientX, event.clientY);
+      const currentZoom = viewportRef.current.zoom;
       const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
       const nextZoom = Math.min(4, Math.max(0.2, currentZoom * zoomFactor));
       const zoomRatio = nextZoom / currentZoom;
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
-      onViewportChange({
+      applyViewport({
         zoom: nextZoom,
-        panX: pointerX - centerX - (pointerX - centerX - state.viewport.panX) * zoomRatio,
-        panY: pointerY - centerY - (pointerY - centerY - state.viewport.panY) * zoomRatio,
+        panX: pointer.x - centerX - (pointer.x - centerX - viewportRef.current.panX) * zoomRatio,
+        panY: pointer.y - centerY - (pointer.y - centerY - viewportRef.current.panY) * zoomRatio,
       });
     }
 
@@ -476,24 +729,24 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const pointerX = event.clientX - centerX;
       const pointerY = event.clientY - centerY;
 
-      setViewTransform((current) => {
-        const nextZoom = clamp(current.zoom * Math.exp(-event.deltaY * 0.002), minViewZoom, maxViewZoom);
-        const ratio = nextZoom / current.zoom;
+      const current = viewTransformRef.current;
+      const nextZoom = clamp(current.zoom * Math.exp(-event.deltaY * 0.002), minViewZoom, maxViewZoom);
+      const ratio = nextZoom / current.zoom;
 
-        if (nextZoom === minViewZoom && current.zoom !== minViewZoom) {
-          return defaultViewTransform;
-        }
+      if (nextZoom === minViewZoom && current.zoom !== minViewZoom) {
+        applyViewTransform(defaultViewTransform);
+        return;
+      }
 
-        return {
-          zoom: nextZoom,
-          panX: pointerX - (pointerX - current.panX) * ratio,
-          panY: pointerY - (pointerY - current.panY) * ratio,
-        };
+      applyViewTransform({
+        zoom: nextZoom,
+        panX: pointerX - (pointerX - current.panX) * ratio,
+        panY: pointerY - (pointerY - current.panY) * ratio,
       });
     }
 
     function resetViewTransform() {
-      setViewTransform(defaultViewTransform);
+      applyViewTransform(defaultViewTransform);
     }
 
     return (
