@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, Grid2X2, ImagePlus, Upload, X } from 'lucide-react';
+import { ArrowLeft, Bookmark, ExternalLink, Grid2X2, Heart, ImagePlus, Info, Upload, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ReferenceImage } from './referenceTypes';
 
@@ -107,6 +107,7 @@ export function ReferenceLibrary({
   const [activeTab, setActiveTab] = useState<LibraryTab>('upload');
   const [activeCategoryId, setActiveCategoryId] = useState('overview');
   const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
 
   const availableCategories = useMemo(() => {
     return libraryCategories
@@ -189,7 +190,9 @@ export function ReferenceLibrary({
   return (
     <main className="gallery-screen" aria-label="Reference library">
       <header className="gallery-topbar">
-        <div className="brand-mark">AA</div>
+        <button type="button" className="icon-button brand-info-button" title="About Art Assistant" onClick={() => setIsAboutOpen(true)}>
+          <Info size={18} />
+        </button>
         <h1>Art Assistant</h1>
         <label className="icon-button" title="Upload image">
           <ImagePlus size={19} />
@@ -417,6 +420,70 @@ export function ReferenceLibrary({
             <button type="button" className="primary-action-button" onClick={usePreviewReference}>
               Use reference
             </button>
+          </div>
+        </section>
+      ) : null}
+
+      {isAboutOpen ? (
+        <section className="about-page" aria-label="About Art Assistant" role="dialog" aria-modal="true">
+          <div className="reference-preview-topbar">
+            <button type="button" className="top-icon-button" title="Close about" onClick={() => setIsAboutOpen(false)}>
+              <X size={20} />
+            </button>
+            <strong>About</strong>
+            <span aria-hidden="true" />
+          </div>
+
+          <div className="about-content">
+            <section className="about-intro">
+              <span className="about-mark">AA</span>
+              <h2>Art Assistant</h2>
+              <p>
+                A studio reference tool by Scott Bonanno for artists studying drawing, colour, value, and traditional
+                painting methods.
+              </p>
+            </section>
+
+            <section className="about-section">
+              <h3>Getting Started</h3>
+              <div className="about-steps">
+                <p>Upload your own reference, or choose a study image from the library.</p>
+                <p>Set the canvas size and grid so the reference can translate to a real painting surface.</p>
+                <p>Use Values, Filters, and Palette tools to study shape, tone, colour, and mixing notes.</p>
+              </div>
+            </section>
+
+            <section className="about-section">
+              <h3>About Scott</h3>
+              <p>
+                Scott is an Australian painter and teacher interested in classical technique, careful observation, and
+                practical tools that make the studio process clearer.
+              </p>
+            </section>
+
+            <section className="about-links" aria-label="Scott Bonanno links">
+              <a href="https://www.scottpaints.com.au/" target="_blank" rel="noreferrer">
+                <span>
+                  <strong>Website</strong>
+                  <small>scottpaints.com.au</small>
+                </span>
+                <ExternalLink size={15} />
+              </a>
+              <a href="https://www.instagram.com/scottbonanno" target="_blank" rel="noreferrer">
+                <span>
+                  <strong>Instagram</strong>
+                  <small>@scottbonanno</small>
+                </span>
+                <ExternalLink size={15} />
+              </a>
+              <a href="https://buy.stripe.com/fZu3coc7vcxIfUp35Hes000" target="_blank" rel="noreferrer">
+                <span>
+                  <strong>Support the app</strong>
+                  <small>A small donation helps keep this project moving.</small>
+                </span>
+                <Heart size={15} />
+              </a>
+            </section>
           </div>
         </section>
       ) : null}

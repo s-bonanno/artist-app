@@ -181,6 +181,12 @@ button:disabled,
   font-weight: 600;
 }
 
+.brand-info-button {
+  justify-self: start;
+  color: #b8d8ff;
+  background: transparent;
+}
+
 .gallery-topbar h1 {
   margin: 0;
   overflow: hidden;
@@ -875,6 +881,136 @@ button:disabled,
   font-weight: 500;
   line-height: 1.42;
   text-decoration: none;
+}
+
+.about-page {
+  position: fixed;
+  inset: 0;
+  z-index: 22;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #000000;
+}
+
+.about-content {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  min-height: 0;
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 24px 18px calc(28px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.about-intro {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.about-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgb(122 183 255 / 0.42);
+  border-radius: 2px;
+  color: #7ab7ff;
+  background: rgb(122 183 255 / 0.12);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.about-intro h2,
+.about-section h3 {
+  margin: 0;
+  color: #f5f5f7;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.about-intro h2 {
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.about-intro p,
+.about-section p,
+.about-steps p {
+  margin: 0;
+  color: #b8b8bd;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.about-section {
+  display: grid;
+  gap: 12px;
+}
+
+.about-section h3 {
+  font-size: 15px;
+}
+
+.about-steps {
+  display: grid;
+  gap: 9px;
+  padding-left: 12px;
+  border-left: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.about-links {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.about-links a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 3px;
+  color: #f5f5f7;
+  background: rgb(255 255 255 / 0.045);
+  text-decoration: none;
+}
+
+.about-links a span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.about-links a strong {
+  overflow: hidden;
+  color: #f5f5f7;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.about-links a small {
+  overflow: hidden;
+  color: #a1a1a6;
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.about-links a svg {
+  justify-self: end;
+  color: #7ab7ff;
 }
 
 .gallery-bottom-nav {
