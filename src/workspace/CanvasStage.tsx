@@ -483,17 +483,6 @@ function getImageDrawRect(
   };
 }
 
-function getCanvasFilter(filters: WorkspaceState['filters'], renderScale = 1) {
-  if (!filters.enabled) return 'none';
-
-  const blur = Math.max(0, filters.blur) * renderScale;
-  const brightness = Math.max(0, 100 + filters.exposure);
-  const contrast = Math.max(0, 100 + filters.contrast);
-  const saturation = Math.max(0, filters.saturation);
-
-  return `blur(${blur}px) brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
-}
-
 function drawReferenceImage(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement,
@@ -504,7 +493,6 @@ function drawReferenceImage(
   renderScale: number,
 ) {
   ctx.save();
-  ctx.filter = state.filters.showOriginal ? 'none' : getCanvasFilter(state.filters, renderScale);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(image, imageRect.x, imageRect.y, imageRect.width, imageRect.height);
@@ -512,14 +500,18 @@ function drawReferenceImage(
 
   if (state.filters.showOriginal) return;
 
+  const shouldApplyBaseFilters = hasBaseFilterAdjustments(state.filters);
   const shouldApplyTonalFilters = hasTonalFilterAdjustments(state.filters);
   const shouldApplyValueMap = shouldApplyValues(state.values);
-  if (!shouldApplyTonalFilters && !shouldApplyValueMap) return;
+  if (!shouldApplyBaseFilters && !shouldApplyTonalFilters && !shouldApplyValueMap) return;
 
   const visibleRect = getVisibleImageDataRect(imageRect, canvasWidth, canvasHeight);
   if (!visibleRect) return;
 
   const imageData = ctx.getImageData(visibleRect.x, visibleRect.y, visibleRect.width, visibleRect.height);
+  if (shouldApplyBaseFilters) {
+    applyBaseFilterAdjustments(imageData, state.filters, renderScale);
+  }
   if (shouldApplyTonalFilters) {
     applyTonalFilterAdjustments(imageData, state.filters);
   }
@@ -540,6 +532,47 @@ function getVisibleImageDataRect(imageRect: ImageDrawRect, canvasWidth: number, 
   if (width <= 0 || height <= 0) return null;
 
   return { x, y, width, height };
+}
+
+function hasBaseFilterAdjustments(filters: WorkspaceState['filters']) {
+  return (
+    filters.enabled &&
+    (filters.blur > 0 || filters.exposure !== 0 || filters.contrast !== 0 || filters.saturation !== 100)
+  );
+}
+
+function applyBaseFilterAdjustments(imageData: ImageData, filters: WorkspaceState['filters'], renderScale = 1) {
+  if (!hasBaseFilterAdjustments(filters)) return;
+
+  const blurRadius = Math.round(Math.max(0, filters.blur) * renderScale);
+  if (blurRadius > 0) {
+    applyBoxBlur(imageData, blurRadius);
+  }
+
+  const brightness = Math.max(0, 100 + filters.exposure) / 100;
+  const contrast = Math.max(0, 100 + filters.contrast) / 100;
+  const saturation = Math.max(0, filters.saturation) / 100;
+  const shouldAdjustColor = brightness !== 1 || contrast !== 1 || saturation !== 1;
+  if (!shouldAdjustColor) return;
+
+  const { data } = imageData;
+
+  for (let index = 0; index < data.length; index += 4) {
+    if (data[index + 3] === 0) continue;
+
+    let red = ((data[index] * brightness - 128) * contrast) + 128;
+    let green = ((data[index + 1] * brightness - 128) * contrast) + 128;
+    let blue = ((data[index + 2] * brightness - 128) * contrast) + 128;
+
+    const luma = red * 0.2126 + green * 0.7152 + blue * 0.0722;
+    red = luma + (red - luma) * saturation;
+    green = luma + (green - luma) * saturation;
+    blue = luma + (blue - luma) * saturation;
+
+    data[index] = clampByte(red);
+    data[index + 1] = clampByte(green);
+    data[index + 2] = clampByte(blue);
+  }
 }
 
 function hasTonalFilterAdjustments(filters: WorkspaceState['filters']) {
@@ -607,14 +640,11 @@ function sampleImageColor(
 
   const useFilteredSource = state.palette.source === 'filtered' && !state.filters.showOriginal;
 
-  if (useFilteredSource) {
-    sampleContext.filter = getCanvasFilter(state.filters);
-  }
-
   sampleContext.drawImage(image, sourceX, sourceY, sampleSize, sampleSize, 0, 0, sampleSize, sampleSize);
 
   const sampleImageData = sampleContext.getImageData(0, 0, sampleSize, sampleSize);
   if (useFilteredSource) {
+    applyBaseFilterAdjustments(sampleImageData, state.filters);
     applyTonalFilterAdjustments(sampleImageData, state.filters);
     applyValuesToImageData(sampleImageData, state.values);
   }
@@ -638,6 +668,106 @@ function sampleImageColor(
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function applyBoxBlur(imageData: ImageData, radius: number) {
+  const safeRadius = Math.max(0, Math.round(radius));
+  if (safeRadius === 0 || imageData.width <= 1 || imageData.height <= 1) return;
+
+  const input = new Uint8ClampedArray(imageData.data);
+  const horizontal = new Uint8ClampedArray(imageData.data.length);
+
+  blurHorizontal(input, horizontal, imageData.width, imageData.height, safeRadius);
+  blurVertical(horizontal, imageData.data, imageData.width, imageData.height, safeRadius);
+}
+
+function blurHorizontal(
+  input: Uint8ClampedArray,
+  output: Uint8ClampedArray,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const windowSize = radius * 2 + 1;
+
+  for (let y = 0; y < height; y += 1) {
+    const rowOffset = y * width * 4;
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    let alpha = 0;
+
+    for (let offset = -radius; offset <= radius; offset += 1) {
+      const x = clamp(offset, 0, width - 1);
+      const index = rowOffset + x * 4;
+      red += input[index];
+      green += input[index + 1];
+      blue += input[index + 2];
+      alpha += input[index + 3];
+    }
+
+    for (let x = 0; x < width; x += 1) {
+      const outputIndex = rowOffset + x * 4;
+      output[outputIndex] = Math.round(red / windowSize);
+      output[outputIndex + 1] = Math.round(green / windowSize);
+      output[outputIndex + 2] = Math.round(blue / windowSize);
+      output[outputIndex + 3] = Math.round(alpha / windowSize);
+
+      const removeX = clamp(x - radius, 0, width - 1);
+      const addX = clamp(x + radius + 1, 0, width - 1);
+      const removeIndex = rowOffset + removeX * 4;
+      const addIndex = rowOffset + addX * 4;
+
+      red += input[addIndex] - input[removeIndex];
+      green += input[addIndex + 1] - input[removeIndex + 1];
+      blue += input[addIndex + 2] - input[removeIndex + 2];
+      alpha += input[addIndex + 3] - input[removeIndex + 3];
+    }
+  }
+}
+
+function blurVertical(
+  input: Uint8ClampedArray,
+  output: Uint8ClampedArray,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const windowSize = radius * 2 + 1;
+
+  for (let x = 0; x < width; x += 1) {
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    let alpha = 0;
+
+    for (let offset = -radius; offset <= radius; offset += 1) {
+      const y = clamp(offset, 0, height - 1);
+      const index = (y * width + x) * 4;
+      red += input[index];
+      green += input[index + 1];
+      blue += input[index + 2];
+      alpha += input[index + 3];
+    }
+
+    for (let y = 0; y < height; y += 1) {
+      const outputIndex = (y * width + x) * 4;
+      output[outputIndex] = Math.round(red / windowSize);
+      output[outputIndex + 1] = Math.round(green / windowSize);
+      output[outputIndex + 2] = Math.round(blue / windowSize);
+      output[outputIndex + 3] = Math.round(alpha / windowSize);
+
+      const removeY = clamp(y - radius, 0, height - 1);
+      const addY = clamp(y + radius + 1, 0, height - 1);
+      const removeIndex = (removeY * width + x) * 4;
+      const addIndex = (addY * width + x) * 4;
+
+      red += input[addIndex] - input[removeIndex];
+      green += input[addIndex + 1] - input[removeIndex + 1];
+      blue += input[addIndex + 2] - input[removeIndex + 2];
+      alpha += input[addIndex + 3] - input[removeIndex + 3];
+    }
+  }
 }
 
 function isTypingTarget(target: EventTarget | null) {
