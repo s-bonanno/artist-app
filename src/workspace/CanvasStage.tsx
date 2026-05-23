@@ -148,6 +148,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       const { width, height, pixelsPerCm } = getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm);
       const renderScale = Math.max(width, height) / BASE_CANVAS_RENDER_LONG_SIDE;
+      const displayRect = canvas.getBoundingClientRect();
+      const labelScale = displayRect.width > 0 ? Math.max(renderScale, width / displayRect.width) : renderScale;
       canvas.width = width;
       canvas.height = height;
 
@@ -165,9 +167,14 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         enabled: state.grid.enabled && !state.filters.showOriginal,
         type: state.grid.type,
         spacing: state.grid.squareSizeCm * pixelsPerCm,
+        canvasWidthCm: state.canvas.widthCm,
+        canvasHeightCm: state.canvas.heightCm,
+        unit: state.grid.unit,
         color: state.grid.color,
         opacity: state.grid.opacity,
         lineWidth: state.grid.lineWidth * renderScale,
+        labelScale,
+        showMeasurements: state.grid.showMeasurements,
       });
     }
 

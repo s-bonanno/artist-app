@@ -25,6 +25,7 @@ export type WorkspaceState = {
     color: string;
     opacity: number;
     lineWidth: number;
+    showMeasurements: boolean;
   };
   filters: {
     enabled: boolean;
@@ -48,10 +49,10 @@ export type WorkspaceState = {
 export const initialWorkspaceState: WorkspaceState = {
   image: null,
   canvas: {
-    widthCm: 30.48,
-    heightCm: 40.64,
-    unit: 'in',
-    presetId: 'rect-12x16',
+    widthCm: 21,
+    heightCm: 29.7,
+    unit: 'cm',
+    presetId: 'a4',
     orientation: 'portrait',
   },
   viewport: {
@@ -62,11 +63,12 @@ export const initialWorkspaceState: WorkspaceState = {
   grid: {
     enabled: true,
     type: 'square',
-    squareSizeCm: 5.08,
-    unit: 'in',
+    squareSizeCm: 5,
+    unit: 'cm',
     color: '#f8fafc',
-    opacity: 0.7,
+    opacity: 0.3,
     lineWidth: 1,
+    showMeasurements: false,
   },
   filters: {
     enabled: false,

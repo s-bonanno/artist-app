@@ -629,7 +629,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
         {activeTool === 'grid' ? (
           <div className="tool-panel-content">
-            <label className="control-row grid-guide-row">
+            <div className="control-row grid-guide-row">
               <span>Guide</span>
               <div className="grid-guide-controls">
                 <select
@@ -664,8 +664,18 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
                     <option value="in">in</option>
                   </select>
                 </div>
+                <label className="inline-toggle" data-disabled={!isMeasuredGrid}>
+                  <span>Measurements</span>
+                  <input
+                    aria-label="Show grid measurements"
+                    type="checkbox"
+                    checked={Boolean(state.grid.showMeasurements)}
+                    disabled={!isMeasuredGrid}
+                    onChange={(event) => updateGrid({ showMeasurements: event.target.checked })}
+                  />
+                </label>
               </div>
-            </label>
+            </div>
 
             {isMeasuredGrid ? (
               <label className="slider-row" data-active-slider={activeSlider === 'grid-scale'}>

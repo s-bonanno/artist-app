@@ -1439,17 +1439,19 @@ button:disabled,
   white-space: nowrap;
 }
 
-.toggle-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
+.inline-toggle {
+  display: inline-grid;
+  grid-template-columns: auto 38px;
   align-items: center;
-  min-height: 34px;
-  color: #f5f5f7;
+  gap: 8px;
+  min-width: max-content;
+  min-height: 36px;
+  color: #c9c9ce;
   font-size: 12px;
   font-weight: 500;
 }
 
-.toggle-row input[type="checkbox"] {
+.inline-toggle input[type="checkbox"] {
   -webkit-appearance: none;
   appearance: none;
   position: relative;
@@ -1465,7 +1467,7 @@ button:disabled,
     border-color 160ms ease;
 }
 
-.toggle-row input[type="checkbox"]::before {
+.inline-toggle input[type="checkbox"]::before {
   content: "";
   position: absolute;
   top: 3px;
@@ -1480,14 +1482,22 @@ button:disabled,
     transform 160ms ease;
 }
 
-.toggle-row input[type="checkbox"]:checked {
+.inline-toggle input[type="checkbox"]:checked {
   border-color: rgb(122 183 255 / 0.55);
   background: rgb(122 183 255 / 0.26);
 }
 
-.toggle-row input[type="checkbox"]:checked::before {
+.inline-toggle input[type="checkbox"]:checked::before {
   background: #f5f5f7;
   transform: translateX(16px);
+}
+
+.inline-toggle[data-disabled="true"] {
+  opacity: 0.42;
+}
+
+.inline-toggle input[type="checkbox"]:disabled {
+  cursor: not-allowed;
 }
 
 .dimension-row {
@@ -1517,13 +1527,15 @@ button:disabled,
 .grid-guide-controls {
   display: grid;
   grid-column: 2 / -1;
-  grid-template-columns: minmax(118px, 1fr) minmax(112px, 132px);
+  grid-template-columns: minmax(118px, 1fr) minmax(112px, 132px) auto;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
 .grid-guide-controls select,
-.grid-guide-controls .measurement-field {
+.grid-guide-controls .measurement-field,
+.grid-guide-controls .inline-toggle {
   grid-column: auto;
 }
 
