@@ -456,8 +456,8 @@ export function ReferenceLibrary({
             <section className="about-section">
               <h3>About Scott</h3>
               <p>
-                Scott is an Australian painter and teacher interested in classical technique, careful observation, and
-                practical tools that make the studio process clearer.
+                Scott is an Australian painter interested in classical technique, careful observation, and practical
+                tools that make the studio process clearer.
               </p>
             </section>
 
