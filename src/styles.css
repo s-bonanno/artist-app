@@ -164,12 +164,11 @@ button:disabled,
 
 .gallery-topbar {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  grid-template-columns: 48px 48px minmax(0, 1fr) 48px 48px;
   align-items: center;
-  min-height: calc(56px + env(safe-area-inset-top, 0px));
-  padding: env(safe-area-inset-top, 0px) 12px 0;
-  border-bottom: 1px solid rgb(255 255 255 / 0.07);
-  background: #161616;
+  min-height: calc(54px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 6px 0;
+  background: #000000;
 }
 
 .brand-mark {
@@ -185,13 +184,8 @@ button:disabled,
   font-weight: 600;
 }
 
-.brand-info-button {
-  justify-self: start;
-  color: #b8d8ff;
-  background: transparent;
-}
-
 .gallery-topbar h1 {
+  grid-column: 3;
   margin: 0;
   overflow: hidden;
   font-size: 16px;
@@ -200,6 +194,10 @@ button:disabled,
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.gallery-upload-button {
+  grid-column: 5;
 }
 
 .gallery-content {
@@ -749,13 +747,26 @@ button:disabled,
   background: #000000;
 }
 
+.reference-preview-topbar[data-layout="preview"] {
+  grid-template-columns: 48px 48px minmax(0, 1fr) 48px 48px;
+}
+
 .reference-preview-topbar strong {
+  grid-column: 2;
   overflow: hidden;
   font-size: 13px;
   font-weight: 500;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.reference-preview-topbar[data-layout="preview"] strong {
+  grid-column: 3;
+}
+
+.reference-preview-close-button {
+  grid-column: 5;
 }
 
 .reference-preview-image {

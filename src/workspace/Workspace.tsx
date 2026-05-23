@@ -189,6 +189,10 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   function updateGrid(nextGrid: Partial<WorkspaceState['grid']>) {
     onChange({
       ...state,
+      filters: {
+        ...state.filters,
+        showOriginal: false,
+      },
       grid: {
         ...state.grid,
         ...nextGrid,
@@ -197,11 +201,14 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   }
 
   function updateFilters(nextFilters: Partial<WorkspaceState['filters']>) {
+    const isSettingOriginalView = 'showOriginal' in nextFilters;
+
     onChange({
       ...state,
       filters: {
         ...state.filters,
         ...nextFilters,
+        showOriginal: isSettingOriginalView ? Boolean(nextFilters.showOriginal) : false,
       },
     });
   }
@@ -217,6 +224,10 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
 
     onChange({
       ...state,
+      filters: {
+        ...state.filters,
+        showOriginal: false,
+      },
       values: {
         ...nextState,
         levels,

@@ -96,7 +96,7 @@ function drawCrossMeasurements(ctx: CanvasRenderingContext2D, width: number, hei
 
   drawLabel(ctx, formatDistance(grid.canvasWidthCm / 2, grid.unit), width / 2, inset, grid, 'center');
   drawLabel(ctx, formatDistance(grid.canvasHeightCm / 2, grid.unit), inset, height / 2, grid, 'left');
-  drawLabel(ctx, 'center', width / 2, height / 2, grid, 'center', 0.82);
+  drawLabel(ctx, 'center', width / 2, height / 2, grid, 'center');
 }
 
 function drawThirdsMeasurements(ctx: CanvasRenderingContext2D, width: number, height: number, grid: GridSettings) {
@@ -117,7 +117,7 @@ function drawThirdsMeasurements(ctx: CanvasRenderingContext2D, width: number, he
 function drawCenterLabel(ctx: CanvasRenderingContext2D, width: number, height: number, grid: GridSettings) {
   if (!grid.showMeasurements) return;
 
-  drawLabel(ctx, 'center', width / 2, height / 2, grid, 'center', 0.82);
+  drawLabel(ctx, 'center', width / 2, height / 2, grid, 'center');
 }
 
 function drawLabel(
@@ -127,14 +127,13 @@ function drawLabel(
   y: number,
   grid: GridSettings,
   align: CanvasTextAlign,
-  opacityMultiplier = 1,
 ) {
   const fontSize = getLabelFontSize(grid);
   const horizontalPadding = Math.max(5 * grid.labelScale, 5);
   const verticalPadding = Math.max(3 * grid.labelScale, 3);
 
   ctx.save();
-  ctx.globalAlpha = Math.min(0.9, Math.max(0.52, grid.opacity + 0.26)) * opacityMultiplier;
+  ctx.globalAlpha = 1;
   ctx.font = `${fontSize}px "DM Sans", Inter, sans-serif`;
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
@@ -145,9 +144,9 @@ function drawLabel(
   const left = align === 'center' ? x - labelWidth / 2 : x;
   const top = y - labelHeight / 2;
 
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.56)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.62)';
   ctx.fillRect(left, top, labelWidth, labelHeight);
-  ctx.fillStyle = grid.color;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
   ctx.fillText(text, align === 'center' ? x : x + horizontalPadding, y);
   ctx.restore();
 }

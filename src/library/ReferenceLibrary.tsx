@@ -191,11 +191,11 @@ export function ReferenceLibrary({
   return (
     <main className="gallery-screen" aria-label="Reference library">
       <header className="gallery-topbar">
-        <button type="button" className="icon-button brand-info-button" title="About Art Assistant" onClick={onOpenAbout}>
+        <button type="button" className="top-icon-button workspace-info-button" title="About Art Assistant" onClick={onOpenAbout}>
           <Info size={18} />
         </button>
         <h1>Art Assistant</h1>
-        <label className="icon-button" title="Upload image">
+        <label className="top-icon-button gallery-upload-button" title="Upload image">
           <ImagePlus size={19} />
           <input
             type="file"
@@ -374,12 +374,15 @@ export function ReferenceLibrary({
 
       {previewImage ? (
         <section className="reference-preview" aria-label="Reference preview" role="dialog" aria-modal="true">
-          <div className="reference-preview-topbar">
+          <div className="reference-preview-topbar" data-layout="preview">
+            <button type="button" className="top-icon-button workspace-info-button" title="About Art Assistant" onClick={onOpenAbout}>
+              <Info size={18} />
+            </button>
             <button type="button" className="top-icon-button" title="Back to library" onClick={() => setPreviewImage(null)}>
               <ArrowLeft size={20} />
             </button>
             <strong>Preview</strong>
-            <button type="button" className="top-icon-button" title="Close preview" onClick={() => setPreviewImage(null)}>
+            <button type="button" className="top-icon-button reference-preview-close-button" title="Close preview" onClick={() => setPreviewImage(null)}>
               <X size={20} />
             </button>
           </div>
