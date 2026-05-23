@@ -1,6 +1,12 @@
 import type { ReferenceImage } from '../library/referenceTypes';
 
-export const references: ReferenceImage[] = [
+const withBasePath = (path: string) => {
+  if (/^(https?:|blob:|data:)/.test(path)) return path;
+
+  return `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`;
+};
+
+const rawReferences: ReferenceImage[] = [
   {
     id: 'bargue-1-1',
     title: 'Bargue Plate 1.1',
@@ -963,3 +969,9 @@ export const references: ReferenceImage[] = [
     rights: 'Public domain',
   },
 ];
+
+export const references: ReferenceImage[] = rawReferences.map((reference) => ({
+  ...reference,
+  src: withBasePath(reference.src),
+  thumbnailSrc: reference.thumbnailSrc ? withBasePath(reference.thumbnailSrc) : undefined,
+}));
