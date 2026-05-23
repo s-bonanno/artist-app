@@ -50,6 +50,7 @@ const defaultViewTransform: ViewTransform = {
   panY: 0,
 };
 
+const paletteSampleSize = 3;
 const minViewZoom = 1;
 const maxViewZoom = 6;
 
@@ -228,8 +229,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const sample: ColorSample = {
         hex: rgbToHex(rgb),
         rgb,
-        source: state.palette.source,
-        sampleSize: state.palette.sampleSize,
+        source: getPaletteSampleSource(state),
+        sampleSize: paletteSampleSize,
         imagePoint: {
           x: Math.round(imageX),
           y: Math.round(imageY),
@@ -703,7 +704,7 @@ function sampleImageColor(
   imageY: number,
   state: WorkspaceState,
 ): RgbColor {
-  const sampleSize = state.palette.sampleSize;
+  const sampleSize = paletteSampleSize;
   const halfSample = Math.floor(sampleSize / 2);
   const sourceX = clamp(Math.round(imageX) - halfSample, 0, image.naturalWidth - sampleSize);
   const sourceY = clamp(Math.round(imageY) - halfSample, 0, image.naturalHeight - sampleSize);
@@ -715,7 +716,7 @@ function sampleImageColor(
 
   if (!sampleContext) return [0, 0, 0];
 
-  const useFilteredSource = state.palette.source === 'filtered' && !state.filters.showOriginal;
+  const useFilteredSource = getPaletteSampleSource(state) === 'filtered';
 
   sampleContext.drawImage(image, sourceX, sourceY, sampleSize, sampleSize, 0, 0, sampleSize, sampleSize);
 
@@ -741,6 +742,14 @@ function sampleImageColor(
     Math.round(channels[1] / pixelCount),
     Math.round(channels[2] / pixelCount),
   ];
+}
+
+function getPaletteSampleSource(state: WorkspaceState) {
+  if (state.filters.showOriginal) return 'original';
+
+  return hasBaseFilterAdjustments(state.filters) || hasTonalFilterAdjustments(state.filters) || shouldApplyValues(state.values)
+    ? 'filtered'
+    : 'original';
 }
 
 function clamp(value: number, min: number, max: number) {

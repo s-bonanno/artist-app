@@ -1,6 +1,6 @@
 export type PaletteSource = 'original' | 'filtered';
 
-export type SampleSize = 1 | 3 | 5;
+export type SampleSize = 3;
 
 export type RgbColor = [number, number, number];
 

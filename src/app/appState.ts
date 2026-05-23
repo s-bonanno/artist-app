@@ -1,6 +1,6 @@
 import type { GridGuideType } from '../grid/drawGrid';
 import type { ReferenceImage } from '../library/referenceTypes';
-import type { PaletteSource, PaletteSwatch, SampleSize } from '../palette/paletteTypes';
+import type { PaletteSwatch } from '../palette/paletteTypes';
 import type { ValueSettings } from '../values/valueTypes';
 
 export type WorkspaceState = {
@@ -39,8 +39,6 @@ export type WorkspaceState = {
   };
   values: ValueSettings;
   palette: {
-    source: PaletteSource;
-    sampleSize: SampleSize;
     swatches: PaletteSwatch[];
     selectedSwatchId: string | null;
   };
@@ -89,8 +87,6 @@ export const initialWorkspaceState: WorkspaceState = {
     opacity: 1,
   },
   palette: {
-    source: 'filtered',
-    sampleSize: 3,
     swatches: [],
     selectedSwatchId: null,
   },

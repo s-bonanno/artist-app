@@ -41,6 +41,16 @@ export function formatMeasurement(valueCm: number, unit: MeasurementUnit) {
   return value.toFixed(decimals).replace(/\.?0+$/, '');
 }
 
+export function getGridStep(unit: MeasurementUnit) {
+  return unit === 'in' ? 0.25 : 0.5;
+}
+
+export function snapGridMeasurement(value: number, unit: MeasurementUnit) {
+  const step = getGridStep(unit);
+
+  return Math.round(value / step) * step;
+}
+
 export function getCanvasPixelSize(widthCm: number, heightCm: number, maxLongSide = DEFAULT_CANVAS_RENDER_LONG_SIDE) {
   const aspectRatio = widthCm / heightCm;
 
@@ -67,10 +77,15 @@ export function getGridLimits(widthCm: number, heightCm: number, unit: Measureme
   const largerCm = Math.max(widthCm, heightCm);
   const minCm = Math.max(0.1, smallerCm / 50);
   const maxCm = Math.max(minCm, largerCm / 3);
+  const step = getGridStep(unit);
+  const minValue = Math.ceil(convertFromCm(minCm, unit) / step) * step;
+  const maxValue = Math.floor(convertFromCm(maxCm, unit) / step) * step;
+  const min = Math.max(step, minValue);
+  const max = Math.max(min, maxValue);
 
   return {
-    min: convertFromCm(minCm, unit),
-    max: convertFromCm(maxCm, unit),
-    step: unit === 'in' ? 0.01 : 0.1,
+    min,
+    max,
+    step,
   };
 }

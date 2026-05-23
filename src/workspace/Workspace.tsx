@@ -10,9 +10,7 @@ import {
   EyeOff,
   Grid2X2,
   Image as ImageIcon,
-  Maximize2,
   Minus,
-  Minimize2,
   Moon,
   Palette as PaletteIcon,
   Pipette,
@@ -28,8 +26,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerE
 import type { WorkspaceState } from '../app/appState';
 import { exportCanvas } from '../export/exportCanvas';
 import type { GridGuideType } from '../grid/drawGrid';
-import { rgbToHsl } from '../palette/colorUtils';
-import type { ColorSample, SampleSize } from '../palette/paletteTypes';
+import type { ColorSample } from '../palette/paletteTypes';
 import type { ValueMode } from '../values/valueTypes';
 import { CanvasStage } from './CanvasStage';
 import {
@@ -38,6 +35,7 @@ import {
   convertToCm,
   formatMeasurement,
   getGridLimits,
+  snapGridMeasurement,
   type MeasurementUnit,
 } from './canvasSizing';
 
@@ -49,7 +47,6 @@ type WorkspaceProps = {
 
 type ActiveTool = 'canvas' | 'zoom' | 'grid' | 'values' | 'palette' | 'filters';
 
-const sampleSizes: SampleSize[] = [1, 3, 5];
 const valueModes: Array<{ id: ValueMode; label: string }> = [
   { id: 'map', label: 'Map' },
   { id: 'grayscale', label: 'Gray' },
@@ -76,7 +73,6 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
   const [isPaletteSampling, setIsPaletteSampling] = useState(false);
-  const [isPaletteExpanded, setIsPaletteExpanded] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
@@ -93,8 +89,6 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
     state.palette.swatches.find((swatch) => swatch.id === state.palette.selectedSwatchId) ??
     state.palette.swatches[state.palette.swatches.length - 1] ??
     null;
-  const selectedHsl = selectedSwatch ? rgbToHsl(selectedSwatch.rgb) : null;
-  const isPaletteBoardOpen = activeTool === 'palette' && isPaletteExpanded;
   const hasOpenToolPanel = Boolean(activeTool);
 
   useEffect(() => {
@@ -129,14 +123,12 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   function closeTool() {
     setActiveSlider(null);
     setIsPaletteSampling(false);
-    setIsPaletteExpanded(false);
     setActiveTool(null);
   }
 
   function toggleTool(tool: ActiveTool) {
     setActiveSlider(null);
     setIsPaletteSampling(false);
-    setIsPaletteExpanded(false);
     setActiveTool((currentTool) => (currentTool === tool ? null : tool));
   }
 
@@ -351,20 +343,34 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   }
 
   function setGridUnit(unit: MeasurementUnit) {
-    updateGrid({ unit });
+    const roundedValue = clampGridMeasurement(convertFromCm(state.grid.squareSizeCm, unit), unit);
+
+    updateGrid({
+      unit,
+      squareSizeCm: convertToCm(roundedValue, unit),
+    });
   }
 
   function setGridSquareSize(value: string) {
     const parsedValue = Number(value);
     if (!Number.isFinite(parsedValue) || parsedValue <= 0) return;
 
+    const roundedValue = clampGridMeasurement(parsedValue, state.grid.unit);
+
     updateGrid({
-      squareSizeCm: convertToCm(parsedValue, state.grid.unit),
+      squareSizeCm: convertToCm(roundedValue, state.grid.unit),
     });
   }
 
+  function clampGridMeasurement(value: number, unit: MeasurementUnit) {
+    const limits = getGridLimits(state.canvas.widthCm, state.canvas.heightCm, unit);
+    const roundedValue = snapGridMeasurement(value, unit);
+
+    return Math.min(limits.max, Math.max(limits.min, roundedValue));
+  }
+
   function addSwatch(sample: ColorSample) {
-    const id = crypto.randomUUID();
+    const id = createSwatchId();
 
     setIsPaletteSampling(false);
 
@@ -467,24 +473,11 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
       );
     }
 
-    if (tool === 'palette') {
-      return (
-        <button
-          type="button"
-          className="icon-button compact"
-          title={isPaletteExpanded ? 'Collapse palette' : 'Expand palette'}
-          onClick={() => setIsPaletteExpanded((isExpanded) => !isExpanded)}
-        >
-          {isPaletteExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-        </button>
-      );
-    }
-
     return <span aria-hidden="true" />;
   }
 
-  function renderExpandedPaletteSheet() {
-    if (!isPaletteExpanded || activeTool !== 'palette') return null;
+  function renderPaletteSheet() {
+    if (activeTool !== 'palette') return null;
 
     return (
       <div className="tool-sheet palette-board" onPointerDown={(event) => event.stopPropagation()}>
@@ -522,7 +515,8 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
             {selectedSwatch ? <span>RGB {selectedSwatch.rgb.join(' ')}</span> : <span>Palette board</span>}
           </div>
           <button type="button" className="secondary-button" onClick={startPaletteSampling} disabled={!state.image}>
-            Sample
+            <Pipette size={14} />
+            <span>Sample</span>
           </button>
           <button type="button" className="secondary-button" onClick={removeSelectedSwatch} disabled={!selectedSwatch}>
             Remove
@@ -534,7 +528,7 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
 
   function renderSheet() {
     if (!activeTool) return null;
-    if (isPaletteBoardOpen) return renderExpandedPaletteSheet();
+    if (activeTool === 'palette') return renderPaletteSheet();
 
     return (
       <div className="tool-sheet">
@@ -826,93 +820,6 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
           </div>
         ) : null}
 
-        {activeTool === 'palette' && !isPaletteExpanded ? (
-          <div className="tool-panel-content">
-            <div className="chip-control" aria-label="Palette sample source">
-              <button
-                type="button"
-                data-active={state.palette.source === 'filtered'}
-                onClick={() => updatePalette({ source: 'filtered' })}
-              >
-                Filtered
-              </button>
-              <button
-                type="button"
-                data-active={state.palette.source === 'original'}
-                onClick={() => updatePalette({ source: 'original' })}
-              >
-                Original
-              </button>
-            </div>
-
-            <div className="palette-sample-row">
-              <button
-                type="button"
-                className="sample-mode-button"
-                onClick={startPaletteSampling}
-                disabled={!state.image}
-              >
-                <Pipette size={16} />
-                <span>Sample color</span>
-              </button>
-
-              <div className="chip-control compact-chips" data-options="3" aria-label="Palette sample size">
-                {sampleSizes.map((sampleSize) => (
-                  <button
-                    key={sampleSize}
-                    type="button"
-                    data-active={state.palette.sampleSize === sampleSize}
-                    onClick={() => updatePalette({ sampleSize })}
-                  >
-                    {sampleSize}px
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="palette-block">
-              <div className="swatch-strip">
-                {state.palette.swatches.length ? (
-                  state.palette.swatches.map((swatch) => (
-                    <button
-                      key={swatch.id}
-                      type="button"
-                      className="swatch-chip"
-                      title={swatch.hex}
-                      style={{ backgroundColor: swatch.hex }}
-                      data-active={selectedSwatch?.id === swatch.id}
-                      onClick={() => updatePalette({ selectedSwatchId: swatch.id })}
-                    />
-                  ))
-                ) : null}
-              </div>
-            </div>
-
-            <div className="selected-swatch">
-              <div className="large-swatch" style={{ backgroundColor: selectedSwatch?.hex ?? '#2a2b30' }} />
-              {selectedSwatch ? (
-                <div>
-                  <strong>{selectedSwatch.hex}</strong>
-                  <span>RGB {selectedSwatch.rgb.join(' ')}</span>
-                  {selectedHsl ? (
-                    <span>
-                      HSL {selectedHsl.hue} {selectedHsl.saturation}% {selectedHsl.lightness}%
-                    </span>
-                  ) : null}
-                </div>
-              ) : (
-                <div>
-                  <strong>No swatch yet</strong>
-                  <span>Tap the reference while Palette is open.</span>
-                </div>
-              )}
-              <button type="button" className="secondary-button" onClick={removeSelectedSwatch} disabled={!selectedSwatch}>
-                Remove
-              </button>
-            </div>
-          </div>
-        ) : null}
-
         {activeTool === 'filters' ? (
           <div className="tool-panel-content">
             <label className="slider-row filter-slider-row" data-active-slider={activeSlider === 'filters-exposure'}>
@@ -1161,6 +1068,14 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
       </section>
     </main>
   );
+}
+
+function createSwatchId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `swatch-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function getToolLabel(tool: ActiveTool) {
