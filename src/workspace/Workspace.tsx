@@ -10,6 +10,7 @@ import {
   EyeOff,
   Grid2X2,
   Image as ImageIcon,
+  Info,
   Minus,
   Moon,
   Palette as PaletteIcon,
@@ -42,6 +43,7 @@ import {
 type WorkspaceProps = {
   state: WorkspaceState;
   onBack: () => void;
+  onOpenAbout: () => void;
   onChange: (nextState: WorkspaceState) => void;
 };
 
@@ -68,7 +70,7 @@ const maxValueLevels = 16;
 const minViewportZoom = 0.2;
 const maxViewportZoom = 4;
 
-export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
+export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspaceProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
@@ -969,6 +971,9 @@ export function Workspace({ state, onBack, onChange }: WorkspaceProps) {
   return (
     <main className="edit-screen" data-tool-open={hasOpenToolPanel}>
       <header className="edit-topbar">
+        <button type="button" className="top-icon-button workspace-info-button" title="About Art Assistant" onClick={onOpenAbout}>
+          <Info size={19} />
+        </button>
         <button type="button" className="top-icon-button" title="Back to library" onClick={onBack}>
           <ArrowLeft size={20} />
         </button>

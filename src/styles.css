@@ -52,6 +52,8 @@ select:focus-visible {
 }
 
 .app-shell {
+  height: 100vh;
+  min-height: 100vh;
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
@@ -152,6 +154,8 @@ button:disabled,
 .gallery-screen {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+  min-height: 100vh;
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
@@ -217,6 +221,7 @@ button:disabled,
   justify-items: start;
   align-content: center;
   gap: 14px;
+  min-height: clamp(188px, 25vh, 300px);
   min-height: clamp(188px, 25dvh, 300px);
   padding: clamp(22px, 4vw, 36px);
   border: 1px solid rgb(255 255 255 / 0.1);
@@ -780,6 +785,7 @@ button:disabled,
   display: grid;
   gap: 12px;
   min-height: 0;
+  max-height: 42vh;
   max-height: 42dvh;
   padding: 16px 16px calc(18px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
@@ -1049,6 +1055,7 @@ button:disabled,
   justify-items: center;
   align-content: center;
   gap: 10px;
+  min-height: calc(100vh - 150px);
   min-height: calc(100dvh - 150px);
   padding: 24px;
   color: #9a9a9d;
@@ -1078,6 +1085,7 @@ button:disabled,
   position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  min-height: 100vh;
   min-height: 100dvh;
   overflow: hidden;
   background: #000000;
@@ -1087,11 +1095,15 @@ button:disabled,
   position: relative;
   z-index: 5;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 48px 48px;
+  grid-template-columns: 48px 48px minmax(0, 1fr) 48px 48px;
   align-items: center;
   min-height: calc(54px + env(safe-area-inset-top, 0px));
   padding: env(safe-area-inset-top, 0px) 6px 0;
   background: #000000;
+}
+
+.workspace-info-button {
+  color: #b8d8ff;
 }
 
 .top-icon-button[data-active="true"] {
@@ -1145,6 +1157,7 @@ button:disabled,
   border-radius: 3px;
   color: #f5f5f7;
   background: rgb(24 24 26 / 0.82);
+  -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   font-size: 12px;
   font-weight: 600;
@@ -1192,6 +1205,7 @@ button:disabled,
   width: auto;
   height: auto;
   max-width: min(100%, 980px);
+  max-height: calc(100vh - 154px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   max-height: calc(100dvh - 154px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   border: 1px solid rgb(255 255 255 / 0.14);
   box-shadow: 0 30px 80px rgb(0 0 0 / 0.65);
@@ -1234,6 +1248,7 @@ button:disabled,
   border-radius: 3px;
   color: #f5f5f7;
   background: rgb(24 24 26 / 0.82);
+  -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow: 0 12px 34px rgb(0 0 0 / 0.24);
   font: inherit;
@@ -1336,6 +1351,7 @@ button:disabled,
   border-radius: 3px 3px 0 0;
   background: rgb(29 29 31 / 0.96);
   box-shadow: 0 -20px 60px rgb(0 0 0 / 0.45);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   animation: sheet-in 180ms ease-out;
   transition:
@@ -1771,10 +1787,12 @@ input[type="range"]::-moz-range-thumb {
 .palette-board {
   display: grid;
   grid-template-rows: auto 96px minmax(180px, 1fr) auto;
+  min-height: min(70vh, 620px);
   min-height: min(70dvh, 620px);
   border: 1px solid rgb(255 255 255 / 0.09);
   background: rgb(24 24 26 / 0.94);
   box-shadow: 0 18px 70px rgb(0 0 0 / 0.52);
+  -webkit-backdrop-filter: blur(22px);
   backdrop-filter: blur(22px);
   overflow: hidden;
 }
@@ -1869,6 +1887,7 @@ input[type="range"]::-moz-range-thumb {
   padding: 6px 8px env(safe-area-inset-bottom, 0px);
   border-top: 1px solid rgb(255 255 255 / 0.08);
   background: rgb(29 29 31 / 0.97);
+  -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   transition: opacity 160ms ease;
 }
@@ -1877,12 +1896,14 @@ input[type="range"]::-moz-range-thumb {
   border-color: transparent;
   background: rgb(29 29 31 / 0);
   box-shadow: none;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 
 .tool-dock[data-sliding="true"] .tool-strip {
   border-color: transparent;
   background: rgb(29 29 31 / 0);
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 
@@ -2037,6 +2058,7 @@ input[type="range"]::-moz-range-thumb {
 
   .canvas-stage canvas {
     max-width: min(100%, 1160px);
+    max-height: calc(100vh - 112px - env(safe-area-inset-top, 0px));
     max-height: calc(100dvh - 112px - env(safe-area-inset-top, 0px));
   }
 
@@ -2091,6 +2113,7 @@ input[type="range"]::-moz-range-thumb {
     border: 0;
     border-radius: 0;
     background: rgb(29 29 31 / 0.96);
+    -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
 
@@ -2127,12 +2150,14 @@ input[type="range"]::-moz-range-thumb {
     align-self: start;
     justify-self: stretch;
     width: auto;
+    max-height: calc(100vh - 54px - env(safe-area-inset-top, 0px));
     max-height: calc(100dvh - 54px - env(safe-area-inset-top, 0px));
     border: 0;
     border-bottom: 1px solid rgb(255 255 255 / 0.08);
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+    -webkit-backdrop-filter: none;
     backdrop-filter: none;
     overflow-y: auto;
     animation: none;

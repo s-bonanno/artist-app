@@ -6,6 +6,12 @@ const withBasePath = (path: string) => {
   return `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`;
 };
 
+const getThumbnailPath = (path: string) => {
+  if (/^(https?:|blob:|data:)/.test(path)) return path;
+
+  return path.replace(/^\/references\//, '/references/thumbs/');
+};
+
 const rawReferences: ReferenceImage[] = [
   {
     id: 'bargue-1-1',
@@ -973,5 +979,5 @@ const rawReferences: ReferenceImage[] = [
 export const references: ReferenceImage[] = rawReferences.map((reference) => ({
   ...reference,
   src: withBasePath(reference.src),
-  thumbnailSrc: reference.thumbnailSrc ? withBasePath(reference.thumbnailSrc) : undefined,
+  thumbnailSrc: withBasePath(getThumbnailPath(reference.thumbnailSrc ?? reference.src)),
 }));

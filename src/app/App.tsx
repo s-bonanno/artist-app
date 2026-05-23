@@ -3,6 +3,7 @@ import { references } from '../data/references';
 import { ReferenceLibrary } from '../library/ReferenceLibrary';
 import type { ReferenceImage } from '../library/referenceTypes';
 import { Workspace } from '../workspace/Workspace';
+import { AboutPage } from './AboutPage';
 import { initialWorkspaceState, type WorkspaceState } from './appState';
 
 type AppView = 'gallery' | 'edit';
@@ -10,6 +11,7 @@ type AppView = 'gallery' | 'edit';
 export function App() {
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>(initialWorkspaceState);
   const [view, setView] = useState<AppView>('gallery');
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
 
   function selectImage(image: ReferenceImage) {
     setWorkspaceState((current) => ({
@@ -32,14 +34,17 @@ export function App() {
           selectedImage={workspaceState.image}
           onSelectImage={selectImage}
           onUploadImage={selectImage}
+          onOpenAbout={() => setIsAboutOpen(true)}
         />
       ) : (
         <Workspace
           state={workspaceState}
           onBack={() => setView('gallery')}
           onChange={setWorkspaceState}
+          onOpenAbout={() => setIsAboutOpen(true)}
         />
       )}
+      {isAboutOpen ? <AboutPage onClose={() => setIsAboutOpen(false)} /> : null}
     </div>
   );
 }
