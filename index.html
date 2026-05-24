@@ -8,25 +8,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Art Assistant" />
     <title>Art Assistant</title>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-EML1SHJ5W7"></script>
     <script>
-      (function () {
-        var measurementId = 'G-EML1SHJ5W7';
-        var localHosts = ['localhost', '127.0.0.1', '0.0.0.0'];
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
 
-        if (localHosts.includes(window.location.hostname)) return;
-
-        window.dataLayer = window.dataLayer || [];
-        window.gtag = function () {
-          window.dataLayer.push(arguments);
-        };
-        window.gtag('js', new Date());
-        window.gtag('config', measurementId);
-
-        var script = document.createElement('script');
-        script.async = true;
-        script.src = 'https://www.googletagmanager.com/gtag/js?id=' + measurementId;
-        document.head.appendChild(script);
-      })();
+      if (!['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname)) {
+        gtag('js', new Date());
+        gtag('config', 'G-EML1SHJ5W7');
+      }
     </script>
   </head>
   <body>
