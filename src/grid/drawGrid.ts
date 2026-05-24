@@ -34,7 +34,6 @@ export function drawGridGuides(ctx: CanvasRenderingContext2D, width: number, hei
   if (grid.type === 'diagonal-cross') {
     strokeLine(ctx, 0, 0, width, height);
     strokeLine(ctx, width, 0, 0, height);
-    drawCenterLabel(ctx, width, height, grid);
     ctx.restore();
     return;
   }
@@ -96,7 +95,6 @@ function drawCrossMeasurements(ctx: CanvasRenderingContext2D, width: number, hei
 
   drawLabel(ctx, formatDistance(grid.canvasWidthCm / 2, grid.unit), width / 2, inset, grid, 'center');
   drawLabel(ctx, formatDistance(grid.canvasHeightCm / 2, grid.unit), inset, height / 2, grid, 'left');
-  drawLabel(ctx, 'center', width / 2, height / 2, grid, 'center');
 }
 
 function drawThirdsMeasurements(ctx: CanvasRenderingContext2D, width: number, height: number, grid: GridSettings) {
@@ -112,12 +110,6 @@ function drawThirdsMeasurements(ctx: CanvasRenderingContext2D, width: number, he
   drawLabel(ctx, `2/3 ${formatDistance((grid.canvasWidthCm / 3) * 2, grid.unit)}`, secondX, inset, grid, 'center');
   drawLabel(ctx, `1/3 ${formatDistance(grid.canvasHeightCm / 3, grid.unit)}`, inset, firstY, grid, 'left');
   drawLabel(ctx, `2/3 ${formatDistance((grid.canvasHeightCm / 3) * 2, grid.unit)}`, inset, secondY, grid, 'left');
-}
-
-function drawCenterLabel(ctx: CanvasRenderingContext2D, width: number, height: number, grid: GridSettings) {
-  if (!grid.showMeasurements) return;
-
-  drawLabel(ctx, 'center', width / 2, height / 2, grid, 'center');
 }
 
 function drawLabel(
