@@ -2023,7 +2023,7 @@ input[type="range"]::-moz-range-thumb {
 
 @media (min-width: 720px) {
   .gallery-grid {
-    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   }
 
   .inspiration-grid {

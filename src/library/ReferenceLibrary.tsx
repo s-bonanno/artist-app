@@ -243,7 +243,7 @@ export function ReferenceLibrary({
                   <button
                     type="button"
                     className="inspiration-card"
-                    key={category.id}
+                    key={`${category.id}-${reference.id}`}
                     onClick={() => openLibraryPreview(reference)}
                   >
                     <img src={reference.thumbnailSrc ?? reference.src} alt="" />
@@ -469,21 +469,29 @@ function referenceMatchesTag(reference: ReferenceImage, tag: string) {
 }
 
 function getInspirationPicks(references: ReferenceImage[]) {
+  const targetCount = 8;
   const pickedIds = new Set<string>();
   const picks: Array<{ category: InspirationCategory; reference: ReferenceImage }> = [];
 
-  for (const category of shuffleItems(inspirationCategories)) {
-    const matches = references.filter((reference) => {
-      return !pickedIds.has(reference.id) && category.tags.some((tag) => referenceMatchesTag(reference, tag));
-    });
-    const reference = getRandomItem(matches);
+  while (picks.length < targetCount) {
+    let pickedInPass = false;
 
-    if (reference) {
-      pickedIds.add(reference.id);
-      picks.push({ category, reference });
+    for (const category of shuffleItems(inspirationCategories)) {
+      const matches = references.filter((reference) => {
+        return !pickedIds.has(reference.id) && category.tags.some((tag) => referenceMatchesTag(reference, tag));
+      });
+      const reference = getRandomItem(matches);
+
+      if (reference) {
+        pickedIds.add(reference.id);
+        picks.push({ category, reference });
+        pickedInPass = true;
+      }
+
+      if (picks.length === targetCount) break;
     }
 
-    if (picks.length === 4) break;
+    if (!pickedInPass) break;
   }
 
   return picks;
