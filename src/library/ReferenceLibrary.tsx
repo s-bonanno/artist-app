@@ -36,7 +36,6 @@ type InspirationCategory = {
 const libraryCategories: LibraryCategory[] = [
   { id: 'all', label: 'All', description: 'Every reference in the library.' },
   { id: 'bargue', label: 'Bargue', description: 'Academic plates for accuracy, proportion, and value.', tags: ['bargue'] },
-  { id: 'drawing', label: 'Drawing', description: 'Line, proportion, block-in, and careful copy references.', tags: ['drawing'] },
   { id: 'technical', label: 'Technical', description: 'Structured studies for measurement, transfer, and accuracy.', tags: ['technical'] },
   { id: 'portrait', label: 'Portrait', description: 'Heads and portraits for likeness, color, and planes.', tags: ['portrait'] },
   { id: 'figure', label: 'Figure', description: 'Full figure studies, gesture, anatomy, and rhythm.', tags: ['figure'] },

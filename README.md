@@ -35,7 +35,7 @@ Use this checklist when adding new references:
 - Run `npm run thumbnails` after adding or changing image files. This creates matching thumbnails under `public/references/thumbs` with a maximum dimension of 900 px.
 - In `src/data/references.ts`, point `src` at the full-size image path. `thumbnailSrc` can usually match `src`; the app maps it to the generated thumbnail path when it loads the library.
 - Add useful metadata: `title`, `artist`, `year`, `description`, `suggestedUse`, `sourceUrl`, `tags`, `credit`, and `rights`.
-- Keep tags specific enough to support browsing, such as `portrait`, `figure`, `landscape`, `still-life`, `floral`, `animal`, `drawing`, `technical`, `sargent`, or `bargue`.
+- Keep tags specific enough to support browsing, such as `portrait`, `figure`, `landscape`, `still-life`, `floral`, `animal`, `technical`, `sargent`, or `bargue`.
 
 Useful checks:
 
