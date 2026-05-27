@@ -913,40 +913,44 @@ button:disabled,
   z-index: 22;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
   background: #000000;
+}
+
+.about-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .about-content {
   display: grid;
   align-content: start;
   gap: 22px;
-  min-height: 0;
   width: min(100%, 760px);
   margin: 0 auto;
   padding: 24px 18px calc(28px + env(safe-area-inset-bottom, 0px));
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 .about-intro {
   display: grid;
-  justify-items: start;
+  justify-items: stretch;
   gap: 12px;
   padding-bottom: 22px;
   border-bottom: 1px solid rgb(255 255 255 / 0.08);
 }
 
-.about-mark {
+.about-signature {
+  display: block;
+  justify-self: center;
+  width: min(190px, 58vw);
+  height: auto;
+  margin: 6px 0 10px;
+}
+
+.about-title-group {
   display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgb(122 183 255 / 0.42);
-  border-radius: 2px;
-  color: #7ab7ff;
-  background: rgb(122 183 255 / 0.12);
-  font-size: 12px;
-  font-weight: 600;
+  gap: 5px;
 }
 
 .about-intro h2,
@@ -962,6 +966,14 @@ button:disabled,
   line-height: 1.05;
 }
 
+.about-title-group span {
+  color: #8e8e93;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .about-intro p,
 .about-section p,
 .about-steps p {
@@ -970,6 +982,10 @@ button:disabled,
   font-size: 14px;
   font-weight: 400;
   line-height: 1.5;
+}
+
+.about-intro p {
+  max-width: 560px;
 }
 
 .about-section {
