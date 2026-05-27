@@ -10,6 +10,7 @@ export type ReferenceImage = {
   description?: string;
   suggestedUse?: string;
   artist?: string;
+  artistUrl?: string;
   year?: string;
   sourceUrl?: string;
   tags?: string[];

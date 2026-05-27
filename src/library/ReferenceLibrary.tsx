@@ -42,6 +42,7 @@ const libraryCategories: LibraryCategory[] = [
   { id: 'figure', label: 'Figure', description: 'Full figure studies, gesture, anatomy, and rhythm.', tags: ['figure'] },
   { id: 'landscape', label: 'Landscape', description: 'Outdoor references for light, atmosphere, and composition.', tags: ['landscape'] },
   { id: 'still-life', label: 'Still life', description: 'Objects, casts, and setups for observation.', tags: ['still-life'] },
+  { id: 'florals', label: 'Florals', description: 'Flower studies for edges, colour notes, and painterly grouping.', tags: ['floral'] },
   { id: 'animals', label: 'Animals', description: 'Animal references for structure, gesture, silhouette, and coat textures.', tags: ['animal'] },
 ];
 
@@ -66,6 +67,13 @@ const libraryShelves: LibraryShelf[] = [
     description: 'Objects, edges, reflections, and colour mixing.',
     categoryId: 'still-life',
     tags: ['still-life'],
+  },
+  {
+    id: 'florals',
+    label: 'Florals',
+    description: 'Flower groups, garden colour, and soft edge studies.',
+    categoryId: 'florals',
+    tags: ['floral'],
   },
   {
     id: 'landscapes',
@@ -95,6 +103,7 @@ const inspirationCategories: InspirationCategory[] = [
   { id: 'figure', label: 'Figure', tags: ['figure'] },
   { id: 'landscape', label: 'Landscape', tags: ['landscape'] },
   { id: 'still-life', label: 'Still life', tags: ['still-life'] },
+  { id: 'florals', label: 'Florals', tags: ['floral'] },
   { id: 'animals', label: 'Animals', tags: ['animal'] },
   { id: 'technical', label: 'Technical drawing', tags: ['technical', 'bargue'] },
 ];
@@ -396,7 +405,19 @@ export function ReferenceLibrary({
               <strong>{previewImage.title}</strong>
               {previewImage.artist ? (
                 <small>
-                  {previewImage.artist}
+                  {previewImage.artistUrl ? (
+                    <a
+                      className="reference-preview-artist-link"
+                      href={previewImage.artistUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`Read about ${previewImage.artist}`}
+                    >
+                      {previewImage.artist}
+                    </a>
+                  ) : (
+                    previewImage.artist
+                  )}
                   {previewImage.year ? `, ${previewImage.year}` : ''}
                 </small>
               ) : null}

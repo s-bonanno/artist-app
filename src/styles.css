@@ -828,6 +828,13 @@ button:disabled,
   font-weight: 500;
 }
 
+.reference-preview-artist-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgb(255 255 255 / 0.28);
+  text-underline-offset: 3px;
+}
+
 .reference-preview-meta,
 .reference-preview-tags {
   display: flex;
