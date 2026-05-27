@@ -442,17 +442,6 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
     });
   }
 
-  function resetValues() {
-    updateValues({
-      enabled: false,
-      mode: 'map',
-      levels: 4,
-      visibleLevels: 3,
-      simplify: 0,
-      opacity: 1,
-    });
-  }
-
   function renderHeaderAction(tool: ActiveTool) {
     if (tool === 'grid') {
       return (
@@ -836,10 +825,6 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
               />
               <strong>{Math.round(state.values.opacity * 100)}%</strong>
             </label>
-
-            <button type="button" className="secondary-button" onClick={resetValues}>
-              Reset values
-            </button>
           </div>
         ) : null}
 
@@ -1027,7 +1012,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
 
       <div
         className="edit-canvas-wrap"
-        onPointerDown={() => {
+        onPointerDownCapture={() => {
           if (!activeTool || activeTool === 'zoom') return;
           if (activeTool === 'palette' && isPaletteSampling) return;
 
