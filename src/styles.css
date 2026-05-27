@@ -1204,6 +1204,61 @@ button:disabled,
   background: #000000;
 }
 
+.workspace-leave-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  display: grid;
+  place-items: end center;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: rgb(0 0 0 / 0.48);
+}
+
+.workspace-leave-dialog {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  width: min(100%, 420px);
+  padding: 18px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 3px;
+  background: rgb(29 29 31 / 0.98);
+  box-shadow: 0 18px 70px rgb(0 0 0 / 0.58);
+}
+
+.workspace-leave-close {
+  justify-self: start;
+}
+
+.workspace-leave-dialog > div:first-of-type {
+  display: grid;
+  gap: 7px;
+}
+
+.workspace-leave-dialog strong {
+  color: #f5f5f7;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.workspace-leave-dialog > div:first-of-type span {
+  color: #a1a1a6;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.workspace-leave-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.workspace-leave-actions .secondary-button,
+.workspace-leave-actions .primary-action-button {
+  min-height: 38px;
+}
+
 .canvas-view-pan,
 .canvas-view-scale {
   display: block;

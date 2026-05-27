@@ -77,6 +77,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
   const [isPaletteSampling, setIsPaletteSampling] = useState(false);
   const [isMoveZoomMode, setIsMoveZoomMode] = useState(false);
+  const [isLeavePromptOpen, setIsLeavePromptOpen] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
@@ -441,6 +442,25 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
 
   function stopMoveZoomMode() {
     setIsMoveZoomMode(false);
+  }
+
+  function requestLeaveWorkspace() {
+    if (!state.image) {
+      onBack();
+      return;
+    }
+
+    setIsLeavePromptOpen(true);
+  }
+
+  function leaveWorkspace() {
+    setIsLeavePromptOpen(false);
+    closeTool();
+    onBack();
+  }
+
+  function downloadWorkspacePreview() {
+    if (canvasRef.current) exportCanvas(canvasRef.current);
   }
 
   function resetFilters() {
@@ -986,7 +1006,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
         <button type="button" className="top-icon-button workspace-info-button" title="About Art Assistant" onClick={onOpenAbout}>
           <Info size={19} />
         </button>
-        <button type="button" className="top-icon-button" title="Back to library" onClick={onBack}>
+        <button type="button" className="top-icon-button" title="Back to library" onClick={requestLeaveWorkspace}>
           <ArrowLeft size={20} />
         </button>
         <div className="edit-title">
@@ -1092,6 +1112,37 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
           </button>
         </nav>
       </section>
+
+      {isLeavePromptOpen ? (
+        <div className="workspace-leave-overlay" role="presentation">
+          <section className="workspace-leave-dialog" role="dialog" aria-modal="true" aria-labelledby="leave-workspace-title">
+            <button
+              type="button"
+              className="icon-button compact workspace-leave-close"
+              title="Stay in workspace"
+              onClick={() => setIsLeavePromptOpen(false)}
+            >
+              <X size={16} />
+            </button>
+            <div>
+              <strong id="leave-workspace-title">Leave this workspace?</strong>
+              <span>Your current setup will be cleared when you leave. Download a copy first if you want to keep this view.</span>
+            </div>
+            <div className="workspace-leave-actions">
+              <button type="button" className="secondary-button" onClick={() => setIsLeavePromptOpen(false)}>
+                Stay
+              </button>
+              <button type="button" className="secondary-button" onClick={downloadWorkspacePreview}>
+                <Download size={14} />
+                <span>Download</span>
+              </button>
+              <button type="button" className="primary-action-button" onClick={leaveWorkspace}>
+                Leave
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
