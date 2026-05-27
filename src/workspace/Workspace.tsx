@@ -9,19 +9,19 @@ import {
   Eye,
   EyeOff,
   Grid2X2,
-  Image as ImageIcon,
   Info,
   Minus,
   Moon,
+  Move,
   Palette as PaletteIcon,
   Pipette,
   Plus,
   RectangleHorizontal,
   RectangleVertical,
+  Ruler,
   SlidersHorizontal,
   Sun,
   X,
-  ZoomIn,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { WorkspaceState } from '../app/appState';
@@ -76,6 +76,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
   const [isPaletteSampling, setIsPaletteSampling] = useState(false);
+  const [isMoveZoomMode, setIsMoveZoomMode] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
@@ -94,7 +95,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
     state.palette.swatches.find((swatch) => swatch.id === state.palette.selectedSwatchId) ??
     state.palette.swatches[state.palette.swatches.length - 1] ??
     null;
-  const hasOpenToolPanel = Boolean(activeTool);
+  const hasOpenToolPanel = Boolean(activeTool) && !isMoveZoomMode;
 
   useEffect(() => {
     if (!state.image?.src) {
@@ -128,12 +129,14 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   function closeTool() {
     setActiveSlider(null);
     setIsPaletteSampling(false);
+    setIsMoveZoomMode(false);
     setActiveTool(null);
   }
 
   function toggleTool(tool: ActiveTool) {
     setActiveSlider(null);
     setIsPaletteSampling(false);
+    setIsMoveZoomMode(false);
     setActiveTool((currentTool) => (currentTool === tool ? null : tool));
   }
 
@@ -429,6 +432,17 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
     setIsPaletteSampling(true);
   }
 
+  function startMoveZoomMode() {
+    setActiveSlider(null);
+    setIsPaletteSampling(false);
+    setIsMoveZoomMode(true);
+    setActiveTool('zoom');
+  }
+
+  function stopMoveZoomMode() {
+    setIsMoveZoomMode(false);
+  }
+
   function resetFilters() {
     updateFilters({
       enabled: false,
@@ -540,6 +554,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
 
   function renderSheet() {
     if (!activeTool) return null;
+    if (isMoveZoomMode) return null;
     if (activeTool === 'palette') return renderPaletteSheet();
 
     return (
@@ -940,20 +955,6 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
 
         {activeTool === 'zoom' ? (
           <div className="tool-panel-content">
-            <label className="slider-row" data-active-slider={activeSlider === 'zoom'}>
-              <span>Zoom</span>
-              <input
-                type="range"
-                min="0.2"
-                max="4"
-                step="0.05"
-                value={state.viewport.zoom}
-                onChange={(event) => updateViewport({ zoom: Number(event.target.value) })}
-                {...getSliderProps('zoom')}
-              />
-              <strong>{Math.round(state.viewport.zoom * 100)}%</strong>
-            </label>
-
             <div className="zoom-actions">
               <button type="button" className="icon-button" title="Zoom out" onClick={() => stepZoom('out')}>
                 <Minus size={16} />
@@ -968,6 +969,11 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
                 <Plus size={16} />
               </button>
             </div>
+
+            <button type="button" className="secondary-button move-zoom-button" onClick={startMoveZoomMode} disabled={!state.image}>
+              <Move size={14} />
+              <span>Move &amp; Zoom</span>
+            </button>
           </div>
         ) : null}
       </div>
@@ -1031,10 +1037,19 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
             </button>
           </div>
         ) : null}
+        {isMoveZoomMode ? (
+          <div className="sampling-hint">
+            <Move size={15} />
+            <span>Move &amp; Zoom</span>
+            <button type="button" className="sample-session-close" title="Exit Move & Zoom" onClick={stopMoveZoomMode}>
+              <X size={14} />
+            </button>
+          </div>
+        ) : null}
         <CanvasStage
           ref={canvasRef}
           image={state.image}
-          interactionMode={isPaletteSampling ? 'sample' : activeTool === 'zoom' ? 'pan' : 'locked'}
+          interactionMode={isPaletteSampling ? 'sample' : isMoveZoomMode ? 'pan' : 'locked'}
           state={state}
           onSampleColor={addSwatch}
           onViewportChange={setViewport}
@@ -1052,12 +1067,12 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
 
         <nav className="tool-strip" aria-label="Tool categories">
           <button type="button" data-active={activeTool === 'canvas'} onClick={() => toggleTool('canvas')}>
-            <Crop size={19} />
+            <Ruler size={19} />
             <span>Canvas</span>
           </button>
           <button type="button" data-active={activeTool === 'zoom'} onClick={() => toggleTool('zoom')}>
-            <ZoomIn size={19} />
-            <span>Zoom</span>
+            <Crop size={19} />
+            <span>Crop</span>
           </button>
           <button type="button" data-active={activeTool === 'grid'} onClick={() => toggleTool('grid')}>
             <Grid2X2 size={19} />
@@ -1094,7 +1109,7 @@ function getToolLabel(tool: ActiveTool) {
     case 'canvas':
       return (
         <>
-          <ImageIcon size={16} />
+          <Ruler size={16} />
           Canvas size
         </>
       );
@@ -1129,8 +1144,8 @@ function getToolLabel(tool: ActiveTool) {
     case 'zoom':
       return (
         <>
-          <ZoomIn size={16} />
-          Zoom
+          <Crop size={16} />
+          Crop
         </>
       );
   }

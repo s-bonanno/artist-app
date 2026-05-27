@@ -1795,6 +1795,10 @@ input[type="range"]::-moz-range-thumb {
   gap: 8px;
 }
 
+.move-zoom-button {
+  width: 100%;
+}
+
 .palette-board {
   display: grid;
   grid-template-rows: auto minmax(50px, max-content) minmax(120px, 1fr) auto;
