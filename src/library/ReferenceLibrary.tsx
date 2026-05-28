@@ -1,5 +1,5 @@
 import { ArrowLeft, Bookmark, Grid2X2, ImagePlus, Info, Upload, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReferenceCollection, ReferenceImage } from './referenceTypes';
 
 type ReferenceLibraryProps = {
@@ -121,6 +121,7 @@ export function ReferenceLibrary({
   const [activeCategoryId, setActiveCategoryId] = useState('overview');
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
+  const contentRef = useRef<HTMLElement | null>(null);
 
   const availableCategories = useMemo(() => {
     return libraryCategories
@@ -167,6 +168,17 @@ export function ReferenceLibrary({
       .filter((group) => group.references.length > 0);
   }, [references]);
   const isLibraryOverview = activeCategoryId === 'overview' && !activeCollection;
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      content.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, activeCategoryId, activeCollectionId]);
 
   function handleUpload(file: File | undefined) {
     if (!file) return;
@@ -237,7 +249,7 @@ export function ReferenceLibrary({
         </label>
       </header>
 
-      <section className="gallery-content">
+      <section className="gallery-content" ref={contentRef}>
         {activeTab === 'upload' ? (
           <div className="start-panel">
             <label className="upload-hero">
