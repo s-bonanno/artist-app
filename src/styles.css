@@ -1704,13 +1704,13 @@ select:disabled {
 .measurement-field input,
 .measurement-field select {
   min-height: 36px;
-  font-size: 16px;
   font-weight: 500;
 }
 
 .measurement-field input {
   border-right: 0;
   border-radius: 2px 0 0 2px;
+  font-size: 16px;
 }
 
 .measurement-field select {
@@ -1719,6 +1719,7 @@ select:disabled {
   padding: 0 24px 0 8px;
   color: #f5f5f7;
   background-color: rgb(255 255 255 / 0.1);
+  font-size: 12px;
 }
 
 .grid-color-controls {
