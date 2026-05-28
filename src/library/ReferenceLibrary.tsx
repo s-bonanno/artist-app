@@ -44,6 +44,8 @@ const libraryCategories: LibraryCategory[] = [
   { id: 'animals', label: 'Animals', description: 'Animal references for structure, gesture, silhouette, and coat textures.', tags: ['animal'] },
 ];
 
+const browseCategoryTags = new Set(libraryCategories.flatMap((category) => category.tags ?? []));
+
 const libraryCollections: ReferenceCollection[] = [
   {
     id: 'bargue-plates',
@@ -552,9 +554,21 @@ function createUploadId() {
 }
 
 function getReferencesForCategory(references: ReferenceImage[], category: LibraryCategory) {
-  if (category.id === 'all') return references;
+  if (category.id === 'all') return sortCollectionOnlyReferencesLast(references);
 
   return references.filter((reference) => category.tags?.some((tag) => referenceMatchesTag(reference, tag)));
+}
+
+function sortCollectionOnlyReferencesLast(references: ReferenceImage[]) {
+  return [...references].sort((first, second) => {
+    return Number(isCollectionOnlyReference(first)) - Number(isCollectionOnlyReference(second));
+  });
+}
+
+function isCollectionOnlyReference(reference: ReferenceImage) {
+  const hasBrowseCategoryTag = reference.tags?.some((tag) => browseCategoryTags.has(tag)) ?? false;
+
+  return Boolean(reference.collections?.length) && !hasBrowseCategoryTag;
 }
 
 function getReferencesForCollection(references: ReferenceImage[], collectionId: string) {
