@@ -75,6 +75,11 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
+  const [canvasDimensionDrafts, setCanvasDimensionDrafts] = useState<Record<'widthCm' | 'heightCm', string | null>>({
+    widthCm: null,
+    heightCm: null,
+  });
+  const [gridSquareSizeDraft, setGridSquareSizeDraft] = useState<string | null>(null);
   const [isPaletteSampling, setIsPaletteSampling] = useState(false);
   const [isMoveZoomMode, setIsMoveZoomMode] = useState(false);
   const [isLeavePromptOpen, setIsLeavePromptOpen] = useState(false);
@@ -86,9 +91,12 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
 
   const canvasWidth = formatMeasurement(state.canvas.widthCm, state.canvas.unit);
   const canvasHeight = formatMeasurement(state.canvas.heightCm, state.canvas.unit);
+  const canvasWidthInputValue = canvasDimensionDrafts.widthCm ?? canvasWidth;
+  const canvasHeightInputValue = canvasDimensionDrafts.heightCm ?? canvasHeight;
   const gridGuideType = state.grid.type ?? 'square';
   const isMeasuredGrid = gridGuideType === 'square';
   const gridSquareSize = convertFromCm(state.grid.squareSizeCm, state.grid.unit);
+  const gridSquareInputValue = gridSquareSizeDraft ?? formatMeasurement(state.grid.squareSizeCm, state.grid.unit);
   const isPresetGridColor = gridColorPresets.some((preset) => preset.value === state.grid.color.toLowerCase());
   const matchingCanvasPreset = findMatchingCanvasPreset(state.canvas.widthCm, state.canvas.heightCm);
   const canvasPresetId = matchingCanvasPreset?.id ?? 'custom';
@@ -325,6 +333,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
 
   function selectPreset(presetId: string) {
     const preset = canvasPresets.find((item) => item.id === presetId);
+    clearCanvasDimensionDrafts();
 
     if (!preset) {
       updateCanvas({ presetId: 'custom' });
@@ -344,12 +353,13 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   }
 
   function setCanvasUnit(unit: MeasurementUnit) {
+    clearCanvasDimensionDrafts();
     updateCanvas({ unit });
   }
 
   function setCanvasDimension(key: 'widthCm' | 'heightCm', value: string) {
-    const parsedValue = Number(value);
-    if (!Number.isFinite(parsedValue) || parsedValue <= 0) return;
+    const parsedValue = parsePositiveMeasurement(value);
+    if (parsedValue === null) return;
 
     updateCanvas({
       [key]: convertToCm(parsedValue, state.canvas.unit),
@@ -357,10 +367,41 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
     });
   }
 
+  function startCanvasDimensionEdit(key: 'widthCm' | 'heightCm', value: string) {
+    setCanvasDimensionDrafts((current) => ({
+      ...current,
+      [key]: current[key] ?? value,
+    }));
+  }
+
+  function updateCanvasDimensionDraft(key: 'widthCm' | 'heightCm', value: string) {
+    setCanvasDimensionDrafts((current) => ({
+      ...current,
+      [key]: value,
+    }));
+    setCanvasDimension(key, value);
+  }
+
+  function finishCanvasDimensionEdit(key: 'widthCm' | 'heightCm', value: string) {
+    setCanvasDimension(key, value);
+    setCanvasDimensionDrafts((current) => ({
+      ...current,
+      [key]: null,
+    }));
+  }
+
+  function clearCanvasDimensionDrafts() {
+    setCanvasDimensionDrafts({
+      widthCm: null,
+      heightCm: null,
+    });
+  }
+
   function setOrientation(orientation: WorkspaceState['canvas']['orientation']) {
     const shouldSwapToPortrait = orientation === 'portrait' && state.canvas.widthCm > state.canvas.heightCm;
     const shouldSwapToLandscape = orientation === 'landscape' && state.canvas.heightCm > state.canvas.widthCm;
 
+    clearCanvasDimensionDrafts();
     updateCanvas({
       orientation,
       presetId: 'custom',
@@ -370,6 +411,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   }
 
   function setGridUnit(unit: MeasurementUnit) {
+    setGridSquareSizeDraft(null);
     const roundedValue = clampGridMeasurement(convertFromCm(state.grid.squareSizeCm, unit), unit);
 
     updateGrid({
@@ -379,14 +421,24 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   }
 
   function setGridSquareSize(value: string) {
-    const parsedValue = Number(value);
-    if (!Number.isFinite(parsedValue) || parsedValue <= 0) return;
+    const parsedValue = parsePositiveMeasurement(value);
+    if (parsedValue === null) return;
 
     const roundedValue = clampGridMeasurement(parsedValue, state.grid.unit);
 
     updateGrid({
       squareSizeCm: convertToCm(roundedValue, state.grid.unit),
     });
+  }
+
+  function updateGridSquareSizeDraft(value: string) {
+    setGridSquareSizeDraft(value);
+    setGridSquareSize(value);
+  }
+
+  function finishGridSquareSizeEdit(value: string) {
+    setGridSquareSize(value);
+    setGridSquareSizeDraft(null);
   }
 
   function clampGridMeasurement(value: number, unit: MeasurementUnit) {
@@ -606,11 +658,14 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
                 <span>Width</span>
                 <div className="measurement-field">
                   <input
-                    type="number"
-                    min="0.1"
-                    step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
-                    value={canvasWidth}
-                    onChange={(event) => setCanvasDimension('widthCm', event.target.value)}
+                    aria-label="Canvas width"
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.,]?[0-9]*"
+                    value={canvasWidthInputValue}
+                    onFocus={() => startCanvasDimensionEdit('widthCm', canvasWidth)}
+                    onChange={(event) => updateCanvasDimensionDraft('widthCm', event.target.value)}
+                    onBlur={(event) => finishCanvasDimensionEdit('widthCm', event.target.value)}
                   />
                   <select
                     aria-label="Canvas width unit"
@@ -626,11 +681,14 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
                 <span>Height</span>
                 <div className="measurement-field">
                   <input
-                    type="number"
-                    min="0.1"
-                    step={state.canvas.unit === 'in' ? '0.25' : '0.1'}
-                    value={canvasHeight}
-                    onChange={(event) => setCanvasDimension('heightCm', event.target.value)}
+                    aria-label="Canvas height"
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.,]?[0-9]*"
+                    value={canvasHeightInputValue}
+                    onFocus={() => startCanvasDimensionEdit('heightCm', canvasHeight)}
+                    onChange={(event) => updateCanvasDimensionDraft('heightCm', event.target.value)}
+                    onBlur={(event) => finishCanvasDimensionEdit('heightCm', event.target.value)}
                   />
                   <select
                     aria-label="Canvas height unit"
@@ -687,13 +745,14 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
                 <div className="measurement-field" data-disabled={!isMeasuredGrid}>
                   <input
                     aria-label="Grid square size"
-                    type="number"
-                    min={gridLimits.min}
-                    max={gridLimits.max}
-                    step={gridLimits.step}
-                    value={formatMeasurement(state.grid.squareSizeCm, state.grid.unit)}
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.,]?[0-9]*"
+                    value={gridSquareInputValue}
                     disabled={!isMeasuredGrid}
-                    onChange={(event) => setGridSquareSize(event.target.value)}
+                    onFocus={() => setGridSquareSizeDraft(formatMeasurement(state.grid.squareSizeCm, state.grid.unit))}
+                    onChange={(event) => updateGridSquareSizeDraft(event.target.value)}
+                    onBlur={(event) => finishGridSquareSizeEdit(event.target.value)}
                   />
                   <select
                     aria-label="Grid square unit"
@@ -1204,4 +1263,14 @@ function getToolLabel(tool: ActiveTool) {
 
 function normalizeValueLevels(levels: number) {
   return Math.min(maxValueLevels, Math.max(minValueLevels, Math.round(levels)));
+}
+
+function parsePositiveMeasurement(value: string) {
+  const normalizedValue = value.trim().replace(',', '.');
+
+  if (!normalizedValue || normalizedValue === '.') return null;
+
+  const parsedValue = Number(normalizedValue);
+
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : null;
 }
