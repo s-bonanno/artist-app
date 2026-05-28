@@ -545,6 +545,16 @@ button:disabled,
   font-weight: 500;
 }
 
+.library-collection-card em {
+  overflow: hidden;
+  color: #c8c8cc;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .inspiration-card:hover img,
   .gallery-card:hover img {

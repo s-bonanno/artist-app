@@ -1,6 +1,6 @@
 import { ArrowLeft, Bookmark, Grid2X2, ImagePlus, Info, Upload, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import type { ReferenceImage } from './referenceTypes';
+import type { ReferenceCollection, ReferenceImage } from './referenceTypes';
 
 type ReferenceLibraryProps = {
   references: ReferenceImage[];
@@ -35,7 +35,6 @@ type InspirationCategory = {
 
 const libraryCategories: LibraryCategory[] = [
   { id: 'all', label: 'All', description: 'Every reference in the library.' },
-  { id: 'bargue', label: 'Bargue', description: 'Academic plates for accuracy, proportion, and value.', tags: ['bargue'] },
   { id: 'technical', label: 'Technical', description: 'Structured studies for measurement, transfer, and accuracy.', tags: ['technical'] },
   { id: 'portrait', label: 'Portrait', description: 'Heads and portraits for likeness, color, and planes.', tags: ['portrait'] },
   { id: 'figure', label: 'Figure', description: 'Full figure studies, gesture, anatomy, and rhythm.', tags: ['figure'] },
@@ -43,6 +42,15 @@ const libraryCategories: LibraryCategory[] = [
   { id: 'still-life', label: 'Still life', description: 'Objects, casts, and setups for observation.', tags: ['still-life'] },
   { id: 'florals', label: 'Florals', description: 'Flower studies for edges, colour notes, and painterly grouping.', tags: ['floral'] },
   { id: 'animals', label: 'Animals', description: 'Animal references for structure, gesture, silhouette, and coat textures.', tags: ['animal'] },
+];
+
+const libraryCollections: ReferenceCollection[] = [
+  {
+    id: 'bargue-plates',
+    title: 'Bargue Plates',
+    description: 'Academic drawing plates for proportion, contour, and value study.',
+    coverImageId: 'bargue-course-pl-73',
+  },
 ];
 
 const libraryShelves: LibraryShelf[] = [
@@ -88,13 +96,6 @@ const libraryShelves: LibraryShelf[] = [
     categoryId: 'animals',
     tags: ['animal'],
   },
-  {
-    id: 'technical-drawing',
-    label: 'Technical drawing',
-    description: 'Bargue, master drawings, drapery, and construction studies.',
-    categoryId: 'technical',
-    tags: ['technical'],
-  },
 ];
 
 const inspirationCategories: InspirationCategory[] = [
@@ -104,7 +105,7 @@ const inspirationCategories: InspirationCategory[] = [
   { id: 'still-life', label: 'Still life', tags: ['still-life'] },
   { id: 'florals', label: 'Florals', tags: ['floral'] },
   { id: 'animals', label: 'Animals', tags: ['animal'] },
-  { id: 'technical', label: 'Technical drawing', tags: ['technical', 'bargue'] },
+  { id: 'technical', label: 'Technical drawing', tags: ['technical'] },
 ];
 
 export function ReferenceLibrary({
@@ -116,6 +117,7 @@ export function ReferenceLibrary({
 }: ReferenceLibraryProps) {
   const [activeTab, setActiveTab] = useState<LibraryTab>('upload');
   const [activeCategoryId, setActiveCategoryId] = useState('overview');
+  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
 
   const availableCategories = useMemo(() => {
@@ -129,7 +131,26 @@ export function ReferenceLibrary({
 
   const activeCategory = availableCategories.find((category) => category.id === activeCategoryId) ?? availableCategories[0];
   const categoryReferences = getReferencesForCategory(references, activeCategory);
+  const activeCollection = activeCollectionId
+    ? libraryCollections.find((collection) => collection.id === activeCollectionId) ?? null
+    : null;
+  const activeCollectionReferences = activeCollection ? getReferencesForCollection(references, activeCollection.id) : [];
   const inspirationPicks = useMemo(() => getInspirationPicks(references), [references]);
+  const collectionGroups = useMemo(() => {
+    return libraryCollections
+      .map((collection) => {
+        const collectionReferences = getReferencesForCollection(references, collection.id);
+
+        return {
+          collection,
+          cover: getCollectionCover(collection, collectionReferences, references),
+          count: collectionReferences.length,
+        };
+      })
+      .filter((group): group is { collection: ReferenceCollection; cover: ReferenceImage; count: number } => {
+        return group.count > 0 && Boolean(group.cover);
+      });
+  }, [references]);
   const libraryShelfGroups = useMemo(() => {
     return libraryShelves
       .map((shelf) => {
@@ -143,7 +164,7 @@ export function ReferenceLibrary({
       })
       .filter((group) => group.references.length > 0);
   }, [references]);
-  const isLibraryOverview = activeCategoryId === 'overview';
+  const isLibraryOverview = activeCategoryId === 'overview' && !activeCollection;
 
   function handleUpload(file: File | undefined) {
     if (!file) return;
@@ -241,6 +262,7 @@ export function ReferenceLibrary({
                   onClick={() => {
                     setActiveTab('library');
                     setActiveCategoryId('overview');
+                    setActiveCollectionId(null);
                   }}
                 >
                   Browse library
@@ -284,7 +306,13 @@ export function ReferenceLibrary({
                           <strong>{shelf.label}</strong>
                           <span>{shelf.description}</span>
                         </div>
-                        <button type="button" onClick={() => setActiveCategoryId(shelf.categoryId)}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveCollectionId(null);
+                            setActiveCategoryId(shelf.categoryId);
+                          }}
+                        >
                           View all
                           <small>{count}</small>
                         </button>
@@ -309,12 +337,71 @@ export function ReferenceLibrary({
                       </div>
                     </section>
                   ))}
+
+                  {collectionGroups.length > 0 ? (
+                    <section className="library-shelf" aria-label="Collections">
+                      <div className="library-shelf-heading">
+                        <div>
+                          <strong>Collections</strong>
+                          <span>Curated sets for focused study.</span>
+                        </div>
+                      </div>
+
+                      <div className="library-shelf-scroll">
+                        {collectionGroups.map(({ collection, cover, count }) => (
+                          <button
+                            type="button"
+                            className="gallery-card library-shelf-card library-collection-card"
+                            key={collection.id}
+                            onClick={() => {
+                              setActiveCategoryId('overview');
+                              setActiveCollectionId(collection.id);
+                            }}
+                          >
+                            <img src={cover.thumbnailSrc ?? cover.src} alt="" />
+                            <span>
+                              <small>{count} references</small>
+                              <strong>{collection.title}</strong>
+                              <em>{collection.description}</em>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
                 </div>
+              </>
+            ) : activeCollection ? (
+              <>
+                <div className="library-detail-heading">
+                  <button type="button" className="library-back-button" onClick={() => setActiveCollectionId(null)}>
+                    <ArrowLeft size={17} />
+                    <span>Library</span>
+                  </button>
+                  <div>
+                    <strong>{activeCollection.title}</strong>
+                    <span>{activeCollection.description}</span>
+                  </div>
+                </div>
+
+                <div className="gallery-filter-row">
+                  <strong>{activeCollection.title}</strong>
+                  <span>{activeCollectionReferences.length} references</span>
+                </div>
+
+                {renderReferenceGrid(activeCollectionReferences)}
               </>
             ) : (
               <>
                 <div className="library-detail-heading">
-                  <button type="button" className="library-back-button" onClick={() => setActiveCategoryId('overview')}>
+                  <button
+                    type="button"
+                    className="library-back-button"
+                    onClick={() => {
+                      setActiveCollectionId(null);
+                      setActiveCategoryId('overview');
+                    }}
+                  >
                     <ArrowLeft size={17} />
                     <span>Library</span>
                   </button>
@@ -330,7 +417,10 @@ export function ReferenceLibrary({
                       key={category.id}
                       type="button"
                       data-active={activeCategory.id === category.id}
-                      onClick={() => setActiveCategoryId(category.id)}
+                      onClick={() => {
+                        setActiveCollectionId(null);
+                        setActiveCategoryId(category.id);
+                      }}
                     >
                       <span>{category.label}</span>
                       <small>{category.count}</small>
@@ -369,6 +459,7 @@ export function ReferenceLibrary({
           onClick={() => {
             setActiveTab('library');
             setActiveCategoryId('overview');
+            setActiveCollectionId(null);
           }}
         >
           <Grid2X2 size={18} />
@@ -464,6 +555,21 @@ function getReferencesForCategory(references: ReferenceImage[], category: Librar
   if (category.id === 'all') return references;
 
   return references.filter((reference) => category.tags?.some((tag) => referenceMatchesTag(reference, tag)));
+}
+
+function getReferencesForCollection(references: ReferenceImage[], collectionId: string) {
+  return references.filter((reference) => reference.collections?.includes(collectionId));
+}
+
+function getCollectionCover(
+  collection: ReferenceCollection,
+  collectionReferences: ReferenceImage[],
+  allReferences: ReferenceImage[],
+) {
+  return (
+    (collection.coverImageId ? allReferences.find((reference) => reference.id === collection.coverImageId) : undefined) ??
+    collectionReferences[0]
+  );
 }
 
 function getShelfReferences(references: ReferenceImage[], shelf: LibraryShelf) {

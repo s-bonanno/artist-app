@@ -14,6 +14,14 @@ export type ReferenceImage = {
   year?: string;
   sourceUrl?: string;
   tags?: string[];
+  collections?: string[];
   credit?: string;
   rights?: string;
+};
+
+export type ReferenceCollection = {
+  id: string;
+  title: string;
+  description: string;
+  coverImageId?: string;
 };

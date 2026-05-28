@@ -21,6 +21,23 @@ npm install
 npm run dev
 ```
 
+## Local Library Manager
+
+Use this when you want to review the library, adjust tags or collections, or remove an image from the app metadata without editing code by hand.
+
+```bash
+npm run library:manager
+```
+
+Then open `http://127.0.0.1:5179/`.
+
+Notes:
+
+- This is a local-only tool. It is not part of the public GitHub Pages app.
+- Saving changes rewrites `src/data/references.ts`.
+- Removing an image in the manager removes it from the library metadata, but leaves the actual image file in `public/references` for now.
+- New images still need the normal sourcing, resizing, metadata, and thumbnail workflow below.
+
 ## Adding Reference Images
 
 Library images live in `public/references`, and their metadata lives in `src/data/references.ts`.
