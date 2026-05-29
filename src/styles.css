@@ -491,19 +491,6 @@ button:disabled,
   text-align: left;
 }
 
-.gallery-card::after {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  inset: 0;
-  border: 2px solid transparent;
-  pointer-events: none;
-}
-
-.gallery-card[data-selected="true"]::after {
-  border-color: #7ab7ff;
-}
-
 .gallery-card img {
   position: relative;
   z-index: 0;
