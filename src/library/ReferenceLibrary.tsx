@@ -1,12 +1,14 @@
-import { ArrowLeft, Bookmark, Grid2X2, ImagePlus, Info, Upload, X } from 'lucide-react';
+import { ArrowLeft, Bookmark, Grid2X2, History, ImagePlus, Info, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReferenceCollection, ReferenceImage } from './referenceTypes';
 
 type ReferenceLibraryProps = {
   references: ReferenceImage[];
   selectedImage: ReferenceImage | null;
-  onSelectImage: (image: ReferenceImage) => void;
-  onUploadImage: (image: ReferenceImage) => void;
+  lastWorkspaceImage: ReferenceImage | null;
+  onSelectImage: (image: ReferenceImage) => void | Promise<void>;
+  onUploadImage: (image: ReferenceImage, file: File) => void | Promise<void>;
+  onContinueLastWorkspace: () => void;
   onOpenAbout: () => void;
 };
 
@@ -113,8 +115,10 @@ const inspirationCategories: InspirationCategory[] = [
 export function ReferenceLibrary({
   references,
   selectedImage,
+  lastWorkspaceImage,
   onSelectImage,
   onUploadImage,
+  onContinueLastWorkspace,
   onOpenAbout,
 }: ReferenceLibraryProps) {
   const [activeTab, setActiveTab] = useState<LibraryTab>('upload');
@@ -193,7 +197,7 @@ export function ReferenceLibrary({
       category: 'Uploaded Images',
       tags: ['upload'],
       rights: 'User supplied',
-    });
+    }, file);
   }
 
   function openLibraryPreview(reference: ReferenceImage) {
@@ -252,18 +256,36 @@ export function ReferenceLibrary({
       <section className="gallery-content" ref={contentRef}>
         {activeTab === 'upload' ? (
           <div className="start-panel">
-            <label className="upload-hero">
-              <ImagePlus size={24} />
-              <strong>Upload your reference</strong>
-              <span>Start with your own image, photo, or study reference.</span>
-              <em>Choose image</em>
-              <input
-                type="file"
-                accept="image/*"
-                className="visually-hidden"
-                onChange={(event) => handleUpload(event.target.files?.[0])}
-              />
-            </label>
+            <div className="start-choice-grid" data-has-continue={Boolean(lastWorkspaceImage)}>
+              {lastWorkspaceImage ? (
+                <button
+                  type="button"
+                  className="continue-hero"
+                  onClick={onContinueLastWorkspace}
+                  style={{
+                    backgroundImage: `linear-gradient(90deg, rgb(22 22 22 / 0.96), rgb(22 22 22 / 0.82) 48%, rgb(22 22 22 / 0.45)), linear-gradient(0deg, rgb(22 22 22 / 0.2), rgb(22 22 22 / 0.2)), url("${lastWorkspaceImage.thumbnailSrc ?? lastWorkspaceImage.src}")`,
+                  }}
+                >
+                  <History size={24} />
+                  <strong>Continue workspace</strong>
+                  <span>{lastWorkspaceImage.title}</span>
+                  <em>Open workspace</em>
+                </button>
+              ) : null}
+
+              <label className="upload-hero">
+                <ImagePlus size={24} />
+                <strong>Upload your reference</strong>
+                <span>Start with your own image, photo, or study reference.</span>
+                <em>Choose image</em>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="visually-hidden"
+                  onChange={(event) => handleUpload(event.target.files?.[0])}
+                />
+              </label>
+            </div>
 
             <section className="inspiration-section" aria-label="Looking for inspiration">
               <div className="inspiration-heading">

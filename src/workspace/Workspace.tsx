@@ -8,9 +8,11 @@ import {
   Droplets,
   Eye,
   EyeOff,
+  FileDown,
   Grid2X2,
   Info,
   Minus,
+  MoreHorizontal,
   Moon,
   Move,
   Palette as PaletteIcon,
@@ -19,13 +21,15 @@ import {
   RectangleHorizontal,
   RectangleVertical,
   Ruler,
+  RotateCcw,
   SlidersHorizontal,
   Sun,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import type { WorkspaceState } from '../app/appState';
+import { initialWorkspaceState, type WorkspaceState } from '../app/appState';
 import { exportCanvas } from '../export/exportCanvas';
+import { exportPalette } from '../export/exportPalette';
 import type { GridGuideType } from '../grid/drawGrid';
 import type { ColorSample } from '../palette/paletteTypes';
 import type { ValueMode } from '../values/valueTypes';
@@ -37,6 +41,8 @@ import {
   findMatchingCanvasPreset,
   formatMeasurement,
   getGridLimits,
+  getImageOrientationFromDimensions,
+  orientCanvasToImage,
   snapGridMeasurement,
   type MeasurementUnit,
 } from './canvasSizing';
@@ -82,7 +88,9 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   const [gridSquareSizeDraft, setGridSquareSizeDraft] = useState<string | null>(null);
   const [isPaletteSampling, setIsPaletteSampling] = useState(false);
   const [isMoveZoomMode, setIsMoveZoomMode] = useState(false);
+  const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [isLeavePromptOpen, setIsLeavePromptOpen] = useState(false);
+  const [isResetPromptOpen, setIsResetPromptOpen] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
@@ -142,10 +150,16 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
     setActiveTool(null);
   }
 
+  function closeTransientUi() {
+    setIsWorkspaceMenuOpen(false);
+    setIsResetPromptOpen(false);
+  }
+
   function toggleTool(tool: ActiveTool) {
     setActiveSlider(null);
     setIsPaletteSampling(false);
     setIsMoveZoomMode(false);
+    setIsWorkspaceMenuOpen(false);
     setActiveTool((currentTool) => (currentTool === tool ? null : tool));
   }
 
@@ -502,17 +516,57 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
       return;
     }
 
+    closeTransientUi();
     setIsLeavePromptOpen(true);
   }
 
   function leaveWorkspace() {
     setIsLeavePromptOpen(false);
+    closeTransientUi();
     closeTool();
     onBack();
   }
 
   function downloadWorkspacePreview() {
+    setIsWorkspaceMenuOpen(false);
     if (canvasRef.current) exportCanvas(canvasRef.current);
+  }
+
+  function downloadPaletteSheet() {
+    setIsWorkspaceMenuOpen(false);
+    exportPalette({
+      swatches: state.palette.swatches,
+      image: state.image,
+    });
+  }
+
+  function requestResetWorkspace() {
+    setIsWorkspaceMenuOpen(false);
+    setIsResetPromptOpen(true);
+  }
+
+  function resetWorkspace() {
+    const imageOrientation = imageDimensions
+      ? getImageOrientationFromDimensions(imageDimensions.width, imageDimensions.height)
+      : null;
+    const canvas = imageOrientation
+      ? orientCanvasToImage(initialWorkspaceState.canvas, imageOrientation)
+      : initialWorkspaceState.canvas;
+
+    clearCanvasDimensionDrafts();
+    setGridSquareSizeDraft(null);
+    setIsResetPromptOpen(false);
+    closeTool();
+
+    onChange({
+      ...state,
+      canvas: { ...canvas },
+      viewport: { ...initialWorkspaceState.viewport },
+      grid: { ...initialWorkspaceState.grid },
+      filters: { ...initialWorkspaceState.filters },
+      values: { ...initialWorkspaceState.values },
+      palette: { ...initialWorkspaceState.palette },
+    });
   }
 
   function resetFilters() {
@@ -1084,20 +1138,44 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
         >
           {state.filters.showOriginal ? <EyeOff size={19} /> : <Eye size={19} />}
         </button>
-        <button
-          type="button"
-          className="top-icon-button"
-          title="Export image"
-          onClick={() => canvasRef.current && exportCanvas(canvasRef.current)}
-          disabled={!state.image}
-        >
-          <Download size={20} />
-        </button>
+        <div className="workspace-menu-wrap">
+          <button
+            type="button"
+            className="top-icon-button"
+            title="Workspace actions"
+            aria-haspopup="menu"
+            aria-expanded={isWorkspaceMenuOpen}
+            data-active={isWorkspaceMenuOpen}
+            onClick={() => setIsWorkspaceMenuOpen((isOpen) => !isOpen)}
+            disabled={!state.image}
+          >
+            <MoreHorizontal size={20} />
+          </button>
+
+          {isWorkspaceMenuOpen ? (
+            <div className="workspace-action-menu" role="menu" aria-label="Workspace actions">
+              <button type="button" role="menuitem" onClick={downloadWorkspacePreview}>
+                <Download size={15} />
+                <span>Download image</span>
+              </button>
+              <button type="button" role="menuitem" onClick={downloadPaletteSheet} disabled={state.palette.swatches.length === 0}>
+                <FileDown size={15} />
+                <span>Export palette</span>
+              </button>
+              <button type="button" role="menuitem" onClick={requestResetWorkspace}>
+                <RotateCcw size={15} />
+                <span>Reset workspace</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
       </header>
 
       <div
         className="edit-canvas-wrap"
         onPointerDownCapture={() => {
+          setIsWorkspaceMenuOpen(false);
+
           if (!activeTool || activeTool === 'zoom') return;
           if (activeTool === 'palette' && isPaletteSampling) return;
 
@@ -1185,7 +1263,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
             </button>
             <div>
               <strong id="leave-workspace-title">Leave this workspace?</strong>
-              <span>Your current setup will be cleared when you leave. Download a copy first if you want to keep this view.</span>
+              <span>You can continue this setup later from Upload. Download a copy first if you want to keep this view as an image.</span>
             </div>
             <div className="workspace-leave-actions">
               <button type="button" className="secondary-button" onClick={() => setIsLeavePromptOpen(false)}>
@@ -1197,6 +1275,33 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
               </button>
               <button type="button" className="primary-action-button" onClick={leaveWorkspace}>
                 Leave
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isResetPromptOpen ? (
+        <div className="workspace-leave-overlay" role="presentation">
+          <section className="workspace-leave-dialog" role="dialog" aria-modal="true" aria-labelledby="reset-workspace-title">
+            <button
+              type="button"
+              className="icon-button compact workspace-leave-close"
+              title="Cancel reset"
+              onClick={() => setIsResetPromptOpen(false)}
+            >
+              <X size={16} />
+            </button>
+            <div>
+              <strong id="reset-workspace-title">Reset this workspace?</strong>
+              <span>Keep the current reference and return the tools to their default setup.</span>
+            </div>
+            <div className="workspace-reset-actions">
+              <button type="button" className="secondary-button" onClick={() => setIsResetPromptOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="primary-action-button" onClick={resetWorkspace}>
+                Reset tools and palette
               </button>
             </div>
           </section>

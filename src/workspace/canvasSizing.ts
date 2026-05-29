@@ -3,6 +3,8 @@ export const DEFAULT_CANVAS_RENDER_LONG_SIDE = 2400;
 export const BASE_CANVAS_RENDER_LONG_SIDE = 1200;
 
 export type MeasurementUnit = 'cm' | 'in';
+export type CanvasOrientation = 'portrait' | 'landscape';
+export type ImageOrientation = CanvasOrientation | 'square';
 
 export type CanvasPreset = {
   id: string;
@@ -10,6 +12,14 @@ export type CanvasPreset = {
   width: number;
   height: number;
   unit: MeasurementUnit;
+};
+
+export type CanvasSizingState = {
+  widthCm: number;
+  heightCm: number;
+  unit: MeasurementUnit;
+  presetId: string;
+  orientation: CanvasOrientation;
 };
 
 export const canvasPresets: CanvasPreset[] = [
@@ -53,6 +63,52 @@ export function findMatchingCanvasPreset(widthCm: number, heightCm: number) {
   });
 }
 
+export function getImageOrientationFromDimensions(width: number, height: number): ImageOrientation | null {
+  if (!width || !height) return null;
+  if (width === height) return 'square';
+
+  return width > height ? 'landscape' : 'portrait';
+}
+
+export function orientCanvasToImage<TCanvas extends CanvasSizingState>(
+  canvas: TCanvas,
+  imageOrientation: ImageOrientation,
+): TCanvas {
+  if (imageOrientation === 'square') {
+    const squarePreset = getSmallestSquarePreset();
+
+    if (!squarePreset) return canvas;
+
+    const sizeCm = convertToCm(squarePreset.width, squarePreset.unit);
+
+    return {
+      ...canvas,
+      widthCm: sizeCm,
+      heightCm: sizeCm,
+      unit: squarePreset.unit,
+      presetId: squarePreset.id,
+      orientation: 'portrait',
+    };
+  }
+
+  const canvasIsLandscape = canvas.widthCm >= canvas.heightCm;
+  const imageIsLandscape = imageOrientation === 'landscape';
+
+  if (canvasIsLandscape === imageIsLandscape) {
+    return {
+      ...canvas,
+      orientation: imageOrientation,
+    };
+  }
+
+  return {
+    ...canvas,
+    widthCm: canvas.heightCm,
+    heightCm: canvas.widthCm,
+    orientation: imageOrientation,
+  };
+}
+
 export function getGridStep(unit: MeasurementUnit) {
   return unit === 'in' ? 0.25 : 0.5;
 }
@@ -88,6 +144,12 @@ function dimensionsMatch(widthCm: number, heightCm: number, presetWidthCm: numbe
   const toleranceCm = 0.06;
 
   return Math.abs(widthCm - presetWidthCm) <= toleranceCm && Math.abs(heightCm - presetHeightCm) <= toleranceCm;
+}
+
+function getSmallestSquarePreset() {
+  return canvasPresets
+    .filter((preset) => preset.width === preset.height)
+    .sort((first, second) => convertToCm(first.width, first.unit) - convertToCm(second.width, second.unit))[0];
 }
 
 export function getGridLimits(widthCm: number, heightCm: number, unit: MeasurementUnit) {
