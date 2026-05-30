@@ -5,6 +5,9 @@ const databaseName = 'art-assistant-local';
 const databaseVersion = 1;
 const uploadedImagesStore = 'uploaded-images';
 const lastWorkspaceKey = 'art-assistant:last-workspace';
+const defaultWorkspaceKey = 'art-assistant:default-workspace';
+
+export type WorkspaceDefaults = Pick<WorkspaceState, 'canvas' | 'grid' | 'filters' | 'values'>;
 
 type StoredWorkspaceImage =
   | {
@@ -28,8 +31,19 @@ type StoredWorkspace = {
   state: Partial<Omit<WorkspaceState, 'image'>>;
 };
 
+type StoredWorkspaceDefaults = {
+  version: 1;
+  updatedAt: number;
+  settings: Partial<WorkspaceDefaults>;
+};
+
 export type RestoredWorkspace = {
   state: WorkspaceState;
+  updatedAt: number;
+};
+
+export type RestoredWorkspaceDefaults = {
+  settings: WorkspaceDefaults;
   updatedAt: number;
 };
 
@@ -71,6 +85,49 @@ export async function loadLastWorkspace(references: ReferenceImage[]): Promise<R
 
 export function clearLastWorkspace() {
   window.localStorage.removeItem(lastWorkspaceKey);
+}
+
+export function getWorkspaceDefaults(state: WorkspaceState): WorkspaceDefaults {
+  return {
+    canvas: { ...state.canvas },
+    grid: { ...state.grid },
+    filters: { ...state.filters, showOriginal: false },
+    values: { ...state.values },
+  };
+}
+
+export function saveDefaultWorkspace(settings: WorkspaceDefaults) {
+  const storedDefaults: StoredWorkspaceDefaults = {
+    version: 1,
+    updatedAt: Date.now(),
+    settings,
+  };
+
+  window.localStorage.setItem(defaultWorkspaceKey, JSON.stringify(storedDefaults));
+}
+
+export function loadDefaultWorkspace(): RestoredWorkspaceDefaults | null {
+  try {
+    const storedValue = window.localStorage.getItem(defaultWorkspaceKey);
+    if (!storedValue) return null;
+
+    const parsedValue = JSON.parse(storedValue) as StoredWorkspaceDefaults;
+
+    if (
+      parsedValue?.version !== 1 ||
+      typeof parsedValue.settings !== 'object' ||
+      parsedValue.settings === null
+    ) {
+      return null;
+    }
+
+    return {
+      updatedAt: parsedValue.updatedAt,
+      settings: normalizeWorkspaceDefaults(parsedValue.settings),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function serializeWorkspace(state: WorkspaceState): StoredWorkspace {
@@ -161,6 +218,28 @@ function normalizeStoredState(state: Partial<Omit<WorkspaceState, 'image'>>): Om
       ...state.palette,
       swatches: state.palette?.swatches ?? initialWorkspaceState.palette.swatches,
       selectedSwatchId,
+    },
+  };
+}
+
+function normalizeWorkspaceDefaults(settings: Partial<WorkspaceDefaults>): WorkspaceDefaults {
+  return {
+    canvas: {
+      ...initialWorkspaceState.canvas,
+      ...settings.canvas,
+    },
+    grid: {
+      ...initialWorkspaceState.grid,
+      ...settings.grid,
+    },
+    filters: {
+      ...initialWorkspaceState.filters,
+      ...settings.filters,
+      showOriginal: false,
+    },
+    values: {
+      ...initialWorkspaceState.values,
+      ...settings.values,
     },
   };
 }

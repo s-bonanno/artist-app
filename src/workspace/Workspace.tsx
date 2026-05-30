@@ -9,6 +9,7 @@ import {
   Eye,
   EyeOff,
   FileDown,
+  FolderOpen,
   Grid2X2,
   Info,
   Minus,
@@ -22,6 +23,7 @@ import {
   RectangleVertical,
   Ruler,
   RotateCcw,
+  Save,
   SlidersHorizontal,
   Sun,
   X,
@@ -52,6 +54,9 @@ type WorkspaceProps = {
   onBack: () => void;
   onOpenAbout: () => void;
   onChange: (nextState: WorkspaceState) => void;
+  hasCustomDefaultSettings: boolean;
+  onSaveDefaultSettings: (state: WorkspaceState) => void;
+  onApplyDefaultSettings: () => void;
 };
 
 type ActiveTool = 'canvas' | 'zoom' | 'grid' | 'values' | 'palette' | 'filters';
@@ -77,7 +82,15 @@ const maxValueLevels = 16;
 const minViewportZoom = 0.2;
 const maxViewportZoom = 4;
 
-export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspaceProps) {
+export function Workspace({
+  state,
+  onBack,
+  onOpenAbout,
+  onChange,
+  hasCustomDefaultSettings,
+  onSaveDefaultSettings,
+  onApplyDefaultSettings,
+}: WorkspaceProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool | null>(null);
   const [activeSlider, setActiveSlider] = useState<string | null>(null);
@@ -91,6 +104,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [isLeavePromptOpen, setIsLeavePromptOpen] = useState(false);
   const [isResetPromptOpen, setIsResetPromptOpen] = useState(false);
+  const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
@@ -142,6 +156,16 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
       isCurrentImage = false;
     };
   }, [state.image?.src]);
+
+  useEffect(() => {
+    if (!workspaceNotice) return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setWorkspaceNotice(null);
+    }, 1600);
+
+    return () => window.clearTimeout(timeout);
+  }, [workspaceNotice]);
 
   function closeTool() {
     setActiveSlider(null);
@@ -538,6 +562,20 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
       swatches: state.palette.swatches,
       image: state.image,
     });
+  }
+
+  function saveWorkspaceDefault() {
+    setIsWorkspaceMenuOpen(false);
+    onSaveDefaultSettings(state);
+    setWorkspaceNotice('Default settings saved');
+  }
+
+  function loadWorkspaceDefault() {
+    setIsWorkspaceMenuOpen(false);
+    clearCanvasDimensionDrafts();
+    setGridSquareSizeDraft(null);
+    onApplyDefaultSettings();
+    setWorkspaceNotice('Default settings applied');
   }
 
   function requestResetWorkspace() {
@@ -1162,6 +1200,14 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
                 <FileDown size={15} />
                 <span>Export palette</span>
               </button>
+              <button type="button" role="menuitem" onClick={saveWorkspaceDefault}>
+                <Save size={15} />
+                <span>Save as default settings</span>
+              </button>
+              <button type="button" role="menuitem" onClick={loadWorkspaceDefault} disabled={!hasCustomDefaultSettings}>
+                <FolderOpen size={15} />
+                <span>Apply default settings</span>
+              </button>
               <button type="button" role="menuitem" onClick={requestResetWorkspace}>
                 <RotateCcw size={15} />
                 <span>Reset workspace</span>
@@ -1170,6 +1216,12 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
           ) : null}
         </div>
       </header>
+
+      {workspaceNotice ? (
+        <div className="workspace-toast" role="status">
+          {workspaceNotice}
+        </div>
+      ) : null}
 
       <div
         className="edit-canvas-wrap"

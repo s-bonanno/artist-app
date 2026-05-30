@@ -2,16 +2,29 @@ import { useEffect, useRef, useState } from 'react';
 import { references } from '../data/references';
 import { ReferenceLibrary } from '../library/ReferenceLibrary';
 import type { ReferenceImage } from '../library/referenceTypes';
-import { loadLastWorkspace, saveLastWorkspace, saveUploadedImageBlob } from '../storage/workspaceStorage';
+import {
+  getWorkspaceDefaults,
+  loadDefaultWorkspace,
+  loadLastWorkspace,
+  saveDefaultWorkspace,
+  saveLastWorkspace,
+  saveUploadedImageBlob,
+  type WorkspaceDefaults,
+} from '../storage/workspaceStorage';
 import { Workspace } from '../workspace/Workspace';
 import { getImageOrientationFromDimensions, orientCanvasToImage, type ImageOrientation } from '../workspace/canvasSizing';
 import { AboutPage } from './AboutPage';
 import { initialWorkspaceState, type WorkspaceState } from './appState';
 
 type AppView = 'gallery' | 'edit';
+type DefaultSettingsState = {
+  settings: WorkspaceDefaults;
+  isCustom: boolean;
+};
 
 export function App() {
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>(initialWorkspaceState);
+  const [defaultSettings, setDefaultSettings] = useState<DefaultSettingsState>(getInitialDefaultSettingsState);
   const [lastWorkspaceState, setLastWorkspaceState] = useState<WorkspaceState | null>(null);
   const [view, setView] = useState<AppView>('gallery');
   const [isAboutOpen, setIsAboutOpen] = useState(false);
@@ -59,14 +72,8 @@ export function App() {
     if (selectionId !== imageSelectionId.current) return;
 
     const nextState = {
-      ...workspaceState,
+      ...createWorkspaceFromDefaults(defaultSettings.settings, orientation),
       image,
-      canvas: orientation ? orientCanvasToImage(workspaceState.canvas, orientation) : workspaceState.canvas,
-      viewport: {
-        zoom: 1,
-        panX: 0,
-        panY: 0,
-      },
     };
 
     setWorkspaceState(nextState);
@@ -98,6 +105,28 @@ export function App() {
     setView('edit');
   }
 
+  function saveCurrentSettingsAsDefault(state: WorkspaceState) {
+    const settings = getWorkspaceDefaults(state);
+
+    saveDefaultWorkspace(settings);
+    setDefaultSettings({
+      settings,
+      isCustom: true,
+    });
+  }
+
+  async function applyDefaultSettingsToCurrentReference() {
+    const orientation = workspaceState.image ? await detectImageOrientation(workspaceState.image.src) : null;
+    const nextState = {
+      ...workspaceState,
+      ...createWorkspaceFromDefaults(defaultSettings.settings, orientation),
+      image: workspaceState.image,
+      palette: workspaceState.palette,
+    };
+
+    updateWorkspaceState(nextState);
+  }
+
   return (
     <div className="app-shell" data-view={view}>
       {view === 'gallery' ? (
@@ -115,12 +144,38 @@ export function App() {
           state={workspaceState}
           onBack={() => setView('gallery')}
           onChange={updateWorkspaceState}
+          hasCustomDefaultSettings={defaultSettings.isCustom}
+          onSaveDefaultSettings={saveCurrentSettingsAsDefault}
+          onApplyDefaultSettings={applyDefaultSettingsToCurrentReference}
           onOpenAbout={() => setIsAboutOpen(true)}
         />
       )}
       {isAboutOpen ? <AboutPage onClose={() => setIsAboutOpen(false)} /> : null}
     </div>
   );
+}
+
+function getInitialDefaultSettingsState(): DefaultSettingsState {
+  const restoredDefault = loadDefaultWorkspace();
+
+  return {
+    settings: restoredDefault?.settings ?? getWorkspaceDefaults(initialWorkspaceState),
+    isCustom: Boolean(restoredDefault),
+  };
+}
+
+function createWorkspaceFromDefaults(
+  defaults: WorkspaceDefaults,
+  imageOrientation: ImageOrientation | null,
+): Omit<WorkspaceState, 'image'> {
+  return {
+    canvas: imageOrientation ? orientCanvasToImage(defaults.canvas, imageOrientation) : { ...defaults.canvas },
+    viewport: { ...initialWorkspaceState.viewport },
+    grid: { ...defaults.grid },
+    filters: { ...defaults.filters, showOriginal: false },
+    values: { ...defaults.values },
+    palette: { ...initialWorkspaceState.palette },
+  };
 }
 
 function detectImageOrientation(src: string): Promise<ImageOrientation | null> {

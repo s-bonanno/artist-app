@@ -267,9 +267,9 @@ export function ReferenceLibrary({
                   }}
                 >
                   <History size={24} />
-                  <strong>Continue workspace</strong>
+                  <strong>Continue last reference</strong>
                   <span>{lastWorkspaceImage.title}</span>
-                  <em>Open workspace</em>
+                  <em>Open reference</em>
                 </button>
               ) : null}
 
