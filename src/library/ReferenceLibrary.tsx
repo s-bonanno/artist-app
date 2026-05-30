@@ -6,6 +6,7 @@ type ReferenceLibraryProps = {
   references: ReferenceImage[];
   selectedImage: ReferenceImage | null;
   lastWorkspaceImage: ReferenceImage | null;
+  lastWorkspaceUpdatedAt: number | null;
   onSelectImage: (image: ReferenceImage) => void | Promise<void>;
   onUploadImage: (image: ReferenceImage, file: File) => void | Promise<void>;
   onContinueLastWorkspace: () => void;
@@ -116,6 +117,7 @@ export function ReferenceLibrary({
   references,
   selectedImage,
   lastWorkspaceImage,
+  lastWorkspaceUpdatedAt,
   onSelectImage,
   onUploadImage,
   onContinueLastWorkspace,
@@ -476,10 +478,33 @@ export function ReferenceLibrary({
         ) : null}
 
         {activeTab === 'saved' ? (
-          <div className="saved-empty-state">
-            <Bookmark size={26} />
-            <strong>Saved workspaces</strong>
-            <span>Saved studies will appear here once saving is added.</span>
+          <div className="saved-panel">
+            <div className="saved-intent">
+              <strong>Saved</strong>
+              <span>References you can return to quickly.</span>
+            </div>
+
+            <div className="saved-card-list">
+              {lastWorkspaceImage ? (
+                <button type="button" className="saved-card saved-reference-card" onClick={onContinueLastWorkspace}>
+                  <img src={lastWorkspaceImage.thumbnailSrc ?? lastWorkspaceImage.src} alt="" />
+                  <span>
+                    <small>Last reference</small>
+                    <strong>{lastWorkspaceImage.title}</strong>
+                    <em>{formatSavedReferenceDate(lastWorkspaceUpdatedAt)}</em>
+                  </span>
+                </button>
+              ) : (
+                <div className="saved-card">
+                  <History size={22} />
+                  <span>
+                    <small>Last reference</small>
+                    <strong>Nothing opened yet</strong>
+                    <em>Choose a reference to start.</em>
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         ) : null}
       </section>
@@ -577,6 +602,16 @@ export function ReferenceLibrary({
 
     </main>
   );
+}
+
+function formatSavedReferenceDate(timestamp: number | null) {
+  if (!timestamp) return 'Updated recently';
+
+  return `Updated ${new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(timestamp))}`;
 }
 
 function createUploadId() {

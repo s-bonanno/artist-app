@@ -26,6 +26,7 @@ export function App() {
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>(initialWorkspaceState);
   const [defaultSettings, setDefaultSettings] = useState<DefaultSettingsState>(getInitialDefaultSettingsState);
   const [lastWorkspaceState, setLastWorkspaceState] = useState<WorkspaceState | null>(null);
+  const [lastWorkspaceUpdatedAt, setLastWorkspaceUpdatedAt] = useState<number | null>(null);
   const [view, setView] = useState<AppView>('gallery');
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const imageSelectionId = useRef(0);
@@ -40,6 +41,7 @@ export function App() {
 
         setWorkspaceState(restoredWorkspace.state);
         setLastWorkspaceState(restoredWorkspace.state);
+        setLastWorkspaceUpdatedAt(restoredWorkspace.updatedAt);
       })
       .catch((error) => {
         console.warn('Unable to restore the last workspace.', error);
@@ -78,6 +80,7 @@ export function App() {
 
     setWorkspaceState(nextState);
     setLastWorkspaceState(nextState);
+    setLastWorkspaceUpdatedAt(Date.now());
     setView('edit');
   }
 
@@ -95,7 +98,10 @@ export function App() {
 
   function updateWorkspaceState(nextState: WorkspaceState) {
     setWorkspaceState(nextState);
-    if (nextState.image) setLastWorkspaceState(nextState);
+    if (nextState.image) {
+      setLastWorkspaceState(nextState);
+      setLastWorkspaceUpdatedAt(Date.now());
+    }
   }
 
   function continueLastWorkspace() {
@@ -134,6 +140,7 @@ export function App() {
           references={references}
           selectedImage={workspaceState.image}
           lastWorkspaceImage={lastWorkspaceState?.image ?? null}
+          lastWorkspaceUpdatedAt={lastWorkspaceUpdatedAt}
           onSelectImage={selectImage}
           onUploadImage={uploadImage}
           onContinueLastWorkspace={continueLastWorkspace}
