@@ -1,15 +1,18 @@
-import { ArrowLeft, Bookmark, Grid2X2, History, ImagePlus, Info, Upload, X } from 'lucide-react';
+import { ArrowLeft, Bookmark, Grid2X2, History, ImagePlus, Info, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { RestoredSavedReference } from '../storage/workspaceStorage';
 import type { ReferenceCollection, ReferenceImage } from './referenceTypes';
 
 type ReferenceLibraryProps = {
   references: ReferenceImage[];
   selectedImage: ReferenceImage | null;
   lastWorkspaceImage: ReferenceImage | null;
-  lastWorkspaceUpdatedAt: number | null;
+  savedReferences: RestoredSavedReference[];
   onSelectImage: (image: ReferenceImage) => void | Promise<void>;
   onUploadImage: (image: ReferenceImage, file: File) => void | Promise<void>;
   onContinueLastWorkspace: () => void;
+  onOpenSavedReference: (savedReferenceId: string) => void;
+  onDeleteSavedReference: (savedReferenceId: string) => void;
   onOpenAbout: () => void;
 };
 
@@ -117,16 +120,19 @@ export function ReferenceLibrary({
   references,
   selectedImage,
   lastWorkspaceImage,
-  lastWorkspaceUpdatedAt,
+  savedReferences,
   onSelectImage,
   onUploadImage,
   onContinueLastWorkspace,
+  onOpenSavedReference,
+  onDeleteSavedReference,
   onOpenAbout,
 }: ReferenceLibraryProps) {
   const [activeTab, setActiveTab] = useState<LibraryTab>('upload');
   const [activeCategoryId, setActiveCategoryId] = useState('overview');
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
+  const [savedReferencePendingDeleteId, setSavedReferencePendingDeleteId] = useState<string | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
 
   const availableCategories = useMemo(() => {
@@ -144,6 +150,8 @@ export function ReferenceLibrary({
     ? libraryCollections.find((collection) => collection.id === activeCollectionId) ?? null
     : null;
   const activeCollectionReferences = activeCollection ? getReferencesForCollection(references, activeCollection.id) : [];
+  const savedReferencePendingDelete =
+    savedReferences.find((savedReference) => savedReference.id === savedReferencePendingDeleteId) ?? null;
   const inspirationPicks = useMemo(() => getInspirationPicks(references), [references]);
   const collectionGroups = useMemo(() => {
     return libraryCollections
@@ -210,6 +218,13 @@ export function ReferenceLibrary({
     if (!previewImage) return;
 
     onSelectImage(previewImage);
+  }
+
+  function confirmDeleteSavedReference() {
+    if (!savedReferencePendingDelete) return;
+
+    onDeleteSavedReference(savedReferencePendingDelete.id);
+    setSavedReferencePendingDeleteId(null);
   }
 
   function renderReferenceGrid(items: ReferenceImage[], density: 'compact' | 'regular' = 'regular') {
@@ -485,22 +500,39 @@ export function ReferenceLibrary({
             </div>
 
             <div className="saved-card-list">
-              {lastWorkspaceImage ? (
-                <button type="button" className="saved-card saved-reference-card" onClick={onContinueLastWorkspace}>
-                  <img src={lastWorkspaceImage.thumbnailSrc ?? lastWorkspaceImage.src} alt="" />
-                  <span>
-                    <small>Last reference</small>
-                    <strong>{lastWorkspaceImage.title}</strong>
-                    <em>{formatSavedReferenceDate(lastWorkspaceUpdatedAt)}</em>
-                  </span>
-                </button>
+              {savedReferences.length > 0 ? (
+                savedReferences.map((savedReference) => {
+                  const image = savedReference.state.image;
+                  if (!image) return null;
+
+                  return (
+                    <article className="saved-card saved-reference-card" key={savedReference.id}>
+                      <button type="button" className="saved-card-main" onClick={() => onOpenSavedReference(savedReference.id)}>
+                        <img src={image.thumbnailSrc ?? image.src} alt="" />
+                        <span>
+                          <strong>{image.title}</strong>
+                          <em>{formatSavedReferenceDate(savedReference.updatedAt)}</em>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="saved-card-delete"
+                        title={`Delete ${image.title}`}
+                        aria-label={`Delete ${image.title}`}
+                        onClick={() => setSavedReferencePendingDeleteId(savedReference.id)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </article>
+                  );
+                })
               ) : (
-                <div className="saved-card">
+                <div className="saved-card saved-empty-card">
                   <History size={22} />
                   <span>
-                    <small>Last reference</small>
-                    <strong>Nothing opened yet</strong>
-                    <em>Choose a reference to start.</em>
+                    <small>Saved references</small>
+                    <strong>Nothing saved yet</strong>
+                    <em>Use Save reference from the workspace menu.</em>
                   </span>
                 </div>
               )}
@@ -600,14 +632,43 @@ export function ReferenceLibrary({
         </section>
       ) : null}
 
+      {savedReferencePendingDelete ? (
+        <div className="workspace-leave-overlay" role="presentation">
+          <section className="workspace-leave-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-saved-reference-title">
+            <button
+              type="button"
+              className="icon-button compact workspace-leave-close"
+              title="Keep saved reference"
+              onClick={() => setSavedReferencePendingDeleteId(null)}
+            >
+              <X size={16} />
+            </button>
+            <div>
+              <strong id="delete-saved-reference-title">Delete saved reference?</strong>
+              <span>
+                Remove {savedReferencePendingDelete.state.image?.title ?? 'this reference'} from Saved. The library image stays in the app.
+              </span>
+            </div>
+            <div className="workspace-reset-actions">
+              <button type="button" className="secondary-button" onClick={() => setSavedReferencePendingDeleteId(null)}>
+                Cancel
+              </button>
+              <button type="button" className="primary-action-button" onClick={confirmDeleteSavedReference}>
+                Delete
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
     </main>
   );
 }
 
 function formatSavedReferenceDate(timestamp: number | null) {
-  if (!timestamp) return 'Updated recently';
+  if (!timestamp) return 'Saved recently';
 
-  return `Updated ${new Intl.DateTimeFormat(undefined, {
+  return `Saved ${new Intl.DateTimeFormat(undefined, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

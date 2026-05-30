@@ -1,6 +1,7 @@
 import {
   Aperture,
   ArrowLeft,
+  Bookmark,
   CloudSun,
   Contrast,
   Crop,
@@ -55,6 +56,7 @@ type WorkspaceProps = {
   onOpenAbout: () => void;
   onChange: (nextState: WorkspaceState) => void;
   hasCustomDefaultSettings: boolean;
+  onSaveReference: (state: WorkspaceState) => void;
   onSaveDefaultSettings: (state: WorkspaceState) => void;
   onApplyDefaultSettings: () => void;
 };
@@ -88,6 +90,7 @@ export function Workspace({
   onOpenAbout,
   onChange,
   hasCustomDefaultSettings,
+  onSaveReference,
   onSaveDefaultSettings,
   onApplyDefaultSettings,
 }: WorkspaceProps) {
@@ -562,6 +565,12 @@ export function Workspace({
       swatches: state.palette.swatches,
       image: state.image,
     });
+  }
+
+  function saveReference() {
+    setIsWorkspaceMenuOpen(false);
+    onSaveReference(state);
+    setWorkspaceNotice('Reference saved');
   }
 
   function saveWorkspaceDefault() {
@@ -1199,6 +1208,10 @@ export function Workspace({
               <button type="button" role="menuitem" onClick={downloadPaletteSheet} disabled={state.palette.swatches.length === 0}>
                 <FileDown size={15} />
                 <span>Export palette</span>
+              </button>
+              <button type="button" role="menuitem" onClick={saveReference}>
+                <Bookmark size={15} />
+                <span>Save reference</span>
               </button>
               <button type="button" role="menuitem" onClick={saveWorkspaceDefault}>
                 <Save size={15} />

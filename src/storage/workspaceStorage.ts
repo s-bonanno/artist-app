@@ -6,6 +6,8 @@ const databaseVersion = 1;
 const uploadedImagesStore = 'uploaded-images';
 const lastWorkspaceKey = 'art-assistant:last-workspace';
 const defaultWorkspaceKey = 'art-assistant:default-workspace';
+const savedReferencesKey = 'art-assistant:saved-references';
+const trackedSavedReferenceKey = 'art-assistant:tracked-saved-reference';
 
 export type WorkspaceDefaults = Pick<WorkspaceState, 'canvas' | 'grid' | 'filters' | 'values'>;
 
@@ -37,6 +39,10 @@ type StoredWorkspaceDefaults = {
   settings: Partial<WorkspaceDefaults>;
 };
 
+type StoredSavedReference = StoredWorkspace & {
+  id: string;
+};
+
 export type RestoredWorkspace = {
   state: WorkspaceState;
   updatedAt: number;
@@ -44,6 +50,12 @@ export type RestoredWorkspace = {
 
 export type RestoredWorkspaceDefaults = {
   settings: WorkspaceDefaults;
+  updatedAt: number;
+};
+
+export type RestoredSavedReference = {
+  id: string;
+  state: WorkspaceState;
   updatedAt: number;
 };
 
@@ -85,6 +97,64 @@ export async function loadLastWorkspace(references: ReferenceImage[]): Promise<R
 
 export function clearLastWorkspace() {
   window.localStorage.removeItem(lastWorkspaceKey);
+}
+
+export async function loadSavedReferences(references: ReferenceImage[]): Promise<RestoredSavedReference[]> {
+  const storedReferences = readStoredSavedReferences();
+  const restoredReferences = await Promise.all(
+    storedReferences.map(async (storedReference) => restoreSavedReference(storedReference, references)),
+  );
+  const validReferences = restoredReferences.filter((reference): reference is RestoredSavedReference => Boolean(reference));
+
+  if (validReferences.length !== storedReferences.length) {
+    writeStoredSavedReferences(storedReferences.filter((storedReference) =>
+      validReferences.some((reference) => reference.id === storedReference.id),
+    ));
+  }
+
+  return validReferences.sort((first, second) => second.updatedAt - first.updatedAt);
+}
+
+export function saveReferenceWorkspace(state: WorkspaceState): RestoredSavedReference | null {
+  if (!state.image) return null;
+
+  const savedReference: StoredSavedReference = {
+    ...serializeWorkspace(state),
+    id: getSavedReferenceId(state.image),
+  };
+  const savedReferences = readStoredSavedReferences();
+  const nextReferences = [
+    savedReference,
+    ...savedReferences.filter((reference) => reference.id !== savedReference.id),
+  ];
+
+  writeStoredSavedReferences(nextReferences);
+
+  return {
+    id: savedReference.id,
+    updatedAt: savedReference.updatedAt,
+    state,
+  };
+}
+
+export function deleteSavedReference(savedReferenceId: string) {
+  writeStoredSavedReferences(readStoredSavedReferences().filter((reference) => reference.id !== savedReferenceId));
+}
+
+export function getSavedReferenceId(image: ReferenceImage) {
+  return `${image.sourceType}:${image.id}`;
+}
+
+export function saveTrackedSavedReference(savedReferenceId: string) {
+  window.localStorage.setItem(trackedSavedReferenceKey, savedReferenceId);
+}
+
+export function loadTrackedSavedReference() {
+  return window.localStorage.getItem(trackedSavedReferenceKey);
+}
+
+export function clearTrackedSavedReference() {
+  window.localStorage.removeItem(trackedSavedReferenceKey);
 }
 
 export function getWorkspaceDefaults(state: WorkspaceState): WorkspaceDefaults {
@@ -186,6 +256,33 @@ function readStoredWorkspace(): StoredWorkspace | null {
   }
 }
 
+function readStoredSavedReferences(): StoredSavedReference[] {
+  try {
+    const storedValue = window.localStorage.getItem(savedReferencesKey);
+    if (!storedValue) return [];
+
+    const parsedValue = JSON.parse(storedValue) as StoredSavedReference[];
+
+    if (!Array.isArray(parsedValue)) return [];
+
+    return parsedValue.filter((reference) => {
+      return (
+        reference?.version === 1 &&
+        typeof reference.id === 'string' &&
+        Boolean(reference.image) &&
+        typeof reference.state === 'object' &&
+        reference.state !== null
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredSavedReferences(savedReferences: StoredSavedReference[]) {
+  window.localStorage.setItem(savedReferencesKey, JSON.stringify(savedReferences));
+}
+
 function normalizeStoredState(state: Partial<Omit<WorkspaceState, 'image'>>): Omit<WorkspaceState, 'image'> {
   const selectedSwatchId =
     state.palette?.swatches?.some((swatch) => swatch.id === state.palette?.selectedSwatchId)
@@ -263,6 +360,24 @@ async function restoreImage(storedImage: StoredWorkspaceImage, references: Refer
     category: storedImage.category ?? 'Uploaded Images',
     tags: storedImage.tags ?? ['upload'],
     rights: storedImage.rights ?? 'User supplied',
+  };
+}
+
+async function restoreSavedReference(
+  storedReference: StoredSavedReference,
+  references: ReferenceImage[],
+): Promise<RestoredSavedReference | null> {
+  const image = await restoreImage(storedReference.image, references);
+
+  if (!image) return null;
+
+  return {
+    id: storedReference.id,
+    updatedAt: storedReference.updatedAt,
+    state: {
+      ...normalizeStoredState(storedReference.state ?? {}),
+      image,
+    },
   };
 }
 

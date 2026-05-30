@@ -1,14 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { references } from '../data/references';
 import { ReferenceLibrary } from '../library/ReferenceLibrary';
 import type { ReferenceImage } from '../library/referenceTypes';
 import {
+  clearTrackedSavedReference,
+  deleteSavedReference,
+  getSavedReferenceId,
   getWorkspaceDefaults,
   loadDefaultWorkspace,
   loadLastWorkspace,
+  loadSavedReferences,
+  loadTrackedSavedReference,
   saveDefaultWorkspace,
   saveLastWorkspace,
+  saveReferenceWorkspace,
+  saveTrackedSavedReference,
   saveUploadedImageBlob,
+  type RestoredSavedReference,
   type WorkspaceDefaults,
 } from '../storage/workspaceStorage';
 import { Workspace } from '../workspace/Workspace';
@@ -26,7 +34,8 @@ export function App() {
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>(initialWorkspaceState);
   const [defaultSettings, setDefaultSettings] = useState<DefaultSettingsState>(getInitialDefaultSettingsState);
   const [lastWorkspaceState, setLastWorkspaceState] = useState<WorkspaceState | null>(null);
-  const [lastWorkspaceUpdatedAt, setLastWorkspaceUpdatedAt] = useState<number | null>(null);
+  const [savedReferences, setSavedReferences] = useState<RestoredSavedReference[]>([]);
+  const [activeSavedReferenceId, setActiveSavedReferenceId] = useState<string | null>(loadTrackedSavedReference);
   const [view, setView] = useState<AppView>('gallery');
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const imageSelectionId = useRef(0);
@@ -37,14 +46,36 @@ export function App() {
 
     loadLastWorkspace(references)
       .then((restoredWorkspace) => {
-        if (!isMounted || !restoredWorkspace) return;
+        if (!isMounted) return;
+
+        if (!restoredWorkspace) {
+          setActiveSavedReferenceId(null);
+          clearTrackedSavedReference();
+          return;
+        }
 
         setWorkspaceState(restoredWorkspace.state);
         setLastWorkspaceState(restoredWorkspace.state);
-        setLastWorkspaceUpdatedAt(restoredWorkspace.updatedAt);
       })
       .catch((error) => {
         console.warn('Unable to restore the last workspace.', error);
+      });
+
+    loadSavedReferences(references)
+      .then((restoredReferences) => {
+        if (!isMounted) return;
+
+        setSavedReferences(restoredReferences);
+        setActiveSavedReferenceId((currentId) => {
+          if (!currentId) return null;
+          if (restoredReferences.some((reference) => reference.id === currentId)) return currentId;
+
+          clearTrackedSavedReference();
+          return null;
+        });
+      })
+      .catch((error) => {
+        console.warn('Unable to restore saved references.', error);
       });
 
     return () => {
@@ -54,7 +85,8 @@ export function App() {
 
   useEffect(() => {
     if (!workspaceState.image) return undefined;
-    if (workspaceState.image.sourceType === 'upload' && sessionOnlyUploadIds.current.has(workspaceState.image.id)) {
+    const workspaceImage = workspaceState.image;
+    if (workspaceImage.sourceType === 'upload' && sessionOnlyUploadIds.current.has(workspaceImage.id)) {
       return undefined;
     }
 
@@ -62,10 +94,18 @@ export function App() {
       saveLastWorkspace(workspaceState).catch((error) => {
         console.warn('Unable to save the last workspace.', error);
       });
+
+      if (activeSavedReferenceId && getSavedReferenceId(workspaceImage) === activeSavedReferenceId) {
+        const savedReference = saveReferenceWorkspace(workspaceState);
+
+        if (savedReference) {
+          updateSavedReferenceList(savedReference, setSavedReferences);
+        }
+      }
     }, 400);
 
     return () => window.clearTimeout(timeout);
-  }, [workspaceState]);
+  }, [activeSavedReferenceId, workspaceState]);
 
   async function selectImage(image: ReferenceImage) {
     const selectionId = imageSelectionId.current + 1;
@@ -78,9 +118,10 @@ export function App() {
       image,
     };
 
+    setActiveSavedReferenceId(null);
+    clearTrackedSavedReference();
     setWorkspaceState(nextState);
     setLastWorkspaceState(nextState);
-    setLastWorkspaceUpdatedAt(Date.now());
     setView('edit');
   }
 
@@ -100,7 +141,6 @@ export function App() {
     setWorkspaceState(nextState);
     if (nextState.image) {
       setLastWorkspaceState(nextState);
-      setLastWorkspaceUpdatedAt(Date.now());
     }
   }
 
@@ -109,6 +149,36 @@ export function App() {
 
     setWorkspaceState(lastWorkspaceState);
     setView('edit');
+  }
+
+  function openSavedReference(savedReferenceId: string) {
+    const savedReference = savedReferences.find((reference) => reference.id === savedReferenceId);
+    if (!savedReference) return;
+
+    setWorkspaceState(savedReference.state);
+    setLastWorkspaceState(savedReference.state);
+    setActiveSavedReferenceId(savedReference.id);
+    saveTrackedSavedReference(savedReference.id);
+    setView('edit');
+  }
+
+  function saveCurrentReference(state: WorkspaceState) {
+    const savedReference = saveReferenceWorkspace(state);
+    if (!savedReference) return;
+
+    setActiveSavedReferenceId(savedReference.id);
+    saveTrackedSavedReference(savedReference.id);
+    updateSavedReferenceList(savedReference, setSavedReferences);
+  }
+
+  function removeSavedReference(savedReferenceId: string) {
+    deleteSavedReference(savedReferenceId);
+    if (activeSavedReferenceId === savedReferenceId) {
+      setActiveSavedReferenceId(null);
+      clearTrackedSavedReference();
+    }
+
+    setSavedReferences((currentReferences) => currentReferences.filter((reference) => reference.id !== savedReferenceId));
   }
 
   function saveCurrentSettingsAsDefault(state: WorkspaceState) {
@@ -140,10 +210,12 @@ export function App() {
           references={references}
           selectedImage={workspaceState.image}
           lastWorkspaceImage={lastWorkspaceState?.image ?? null}
-          lastWorkspaceUpdatedAt={lastWorkspaceUpdatedAt}
+          savedReferences={savedReferences}
           onSelectImage={selectImage}
           onUploadImage={uploadImage}
           onContinueLastWorkspace={continueLastWorkspace}
+          onOpenSavedReference={openSavedReference}
+          onDeleteSavedReference={removeSavedReference}
           onOpenAbout={() => setIsAboutOpen(true)}
         />
       ) : (
@@ -152,6 +224,7 @@ export function App() {
           onBack={() => setView('gallery')}
           onChange={updateWorkspaceState}
           hasCustomDefaultSettings={defaultSettings.isCustom}
+          onSaveReference={saveCurrentReference}
           onSaveDefaultSettings={saveCurrentSettingsAsDefault}
           onApplyDefaultSettings={applyDefaultSettingsToCurrentReference}
           onOpenAbout={() => setIsAboutOpen(true)}
@@ -195,4 +268,15 @@ function detectImageOrientation(src: string): Promise<ImageOrientation | null> {
     image.onerror = () => resolve(null);
     image.src = src;
   });
+}
+
+function updateSavedReferenceList(
+  savedReference: RestoredSavedReference,
+  setSavedReferences: Dispatch<SetStateAction<RestoredSavedReference[]>>,
+) {
+  setSavedReferences((currentReferences) =>
+    [savedReference, ...currentReferences.filter((reference) => reference.id !== savedReference.id)].sort(
+      (first, second) => second.updatedAt - first.updatedAt,
+    ),
+  );
 }
