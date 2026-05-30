@@ -1176,7 +1176,7 @@ export function Workspace({ state, onBack, onOpenAbout, onChange }: WorkspacePro
         onPointerDownCapture={() => {
           setIsWorkspaceMenuOpen(false);
 
-          if (!activeTool || activeTool === 'zoom') return;
+          if (!activeTool || isMoveZoomMode) return;
           if (activeTool === 'palette' && isPaletteSampling) return;
 
           closeTool();
