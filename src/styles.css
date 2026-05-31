@@ -812,6 +812,18 @@ button:disabled,
   padding: 14px;
   overflow: hidden;
   background: #000000;
+  cursor: zoom-in;
+  touch-action: none;
+  user-select: none;
+  overscroll-behavior: contain;
+}
+
+.reference-preview-image[data-zoomed="true"] {
+  cursor: grab;
+}
+
+.reference-preview-image[data-panning="true"] {
+  cursor: grabbing;
 }
 
 .reference-preview-image img {
@@ -825,7 +837,10 @@ button:disabled,
   border: 1px solid rgb(255 255 255 / 0.12);
   box-sizing: border-box;
   object-fit: contain;
+  pointer-events: none;
   box-shadow: 0 24px 70px rgb(0 0 0 / 0.62);
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .reference-preview-details {

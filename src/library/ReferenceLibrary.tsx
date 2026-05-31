@@ -1,5 +1,5 @@
 import { ArrowLeft, Bookmark, Grid2X2, History, ImagePlus, Info, Trash2, Upload, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from 'react';
 import type { RestoredSavedReference } from '../storage/workspaceStorage';
 import type { ReferenceCollection, ReferenceImage } from './referenceTypes';
 
@@ -38,6 +38,41 @@ type InspirationCategory = {
   label: string;
   tags: string[];
 };
+
+type PreviewTransform = {
+  scale: number;
+  x: number;
+  y: number;
+};
+
+type PreviewPointer = {
+  x: number;
+  y: number;
+};
+
+type PreviewGesture =
+  | {
+      type: 'drag';
+      pointerId: number;
+      startClientX: number;
+      startClientY: number;
+      startTransform: PreviewTransform;
+    }
+  | {
+      type: 'pinch';
+      pointerIds: [number, number];
+      startDistance: number;
+      startFocal: PreviewPointer;
+      startTransform: PreviewTransform;
+    };
+
+const defaultPreviewTransform: PreviewTransform = {
+  scale: 1,
+  x: 0,
+  y: 0,
+};
+const minPreviewScale = 1;
+const maxPreviewScale = 6;
 
 const libraryCategories: LibraryCategory[] = [
   { id: 'all', label: 'All', description: 'Every reference in the library.' },
@@ -132,8 +167,15 @@ export function ReferenceLibrary({
   const [activeCategoryId, setActiveCategoryId] = useState('overview');
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
+  const [previewTransform, setPreviewTransform] = useState<PreviewTransform>(defaultPreviewTransform);
+  const [isPreviewPanning, setIsPreviewPanning] = useState(false);
   const [savedReferencePendingDeleteId, setSavedReferencePendingDeleteId] = useState<string | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
+  const previewFrameRef = useRef<HTMLDivElement | null>(null);
+  const previewImageRef = useRef<HTMLImageElement | null>(null);
+  const previewTransformRef = useRef<PreviewTransform>(defaultPreviewTransform);
+  const previewPointersRef = useRef<Map<number, PreviewPointer>>(new Map());
+  const previewGestureRef = useRef<PreviewGesture | null>(null);
 
   const availableCategories = useMemo(() => {
     return libraryCategories
@@ -194,6 +236,14 @@ export function ReferenceLibrary({
     return () => window.cancelAnimationFrame(frame);
   }, [activeTab, activeCategoryId, activeCollectionId]);
 
+  useEffect(() => {
+    previewTransformRef.current = previewTransform;
+  }, [previewTransform]);
+
+  useEffect(() => {
+    resetPreviewTransform();
+  }, [previewImage?.id]);
+
   function handleUpload(file: File | undefined) {
     if (!file) return;
 
@@ -218,6 +268,161 @@ export function ReferenceLibrary({
     if (!previewImage) return;
 
     onSelectImage(previewImage);
+  }
+
+  function resetPreviewTransform() {
+    previewPointersRef.current.clear();
+    previewGestureRef.current = null;
+    previewTransformRef.current = defaultPreviewTransform;
+    setPreviewTransform(defaultPreviewTransform);
+    setIsPreviewPanning(false);
+  }
+
+  function applyPreviewTransform(nextTransform: PreviewTransform) {
+    const clampedTransform = clampPreviewTransform(nextTransform, previewFrameRef.current, previewImageRef.current);
+
+    previewTransformRef.current = clampedTransform;
+    setPreviewTransform(clampedTransform);
+  }
+
+  function beginPreviewGesture(frame: HTMLDivElement) {
+    const pointers = Array.from(previewPointersRef.current);
+    const currentTransform = previewTransformRef.current;
+
+    if (pointers.length >= 2) {
+      const [firstPointer, secondPointer] = pointers;
+      const first = firstPointer[1];
+      const second = secondPointer[1];
+      const center = getPreviewPointerCenter(first, second);
+      const frameRect = frame.getBoundingClientRect();
+
+      previewGestureRef.current = {
+        type: 'pinch',
+        pointerIds: [firstPointer[0], secondPointer[0]],
+        startDistance: getPreviewPointerDistance(first, second),
+        startFocal: getPreviewFocalPoint(center, frameRect),
+        startTransform: currentTransform,
+      };
+      setIsPreviewPanning(true);
+      return;
+    }
+
+    if (pointers.length === 1) {
+      const [pointerId, pointer] = pointers[0];
+
+      previewGestureRef.current = {
+        type: 'drag',
+        pointerId,
+        startClientX: pointer.x,
+        startClientY: pointer.y,
+        startTransform: currentTransform,
+      };
+      setIsPreviewPanning(currentTransform.scale > 1.001);
+      return;
+    }
+
+    previewGestureRef.current = null;
+    setIsPreviewPanning(false);
+  }
+
+  function handlePreviewWheel(event: WheelEvent<HTMLDivElement>) {
+    if (!previewImage) return;
+
+    event.preventDefault();
+    const currentTransform = previewTransformRef.current;
+    const nextScale = clamp(currentTransform.scale * Math.exp(-event.deltaY * 0.002), minPreviewScale, maxPreviewScale);
+    const scaleRatio = nextScale / currentTransform.scale;
+    const frameRect = event.currentTarget.getBoundingClientRect();
+    const focalPoint = getPreviewFocalPoint({ x: event.clientX, y: event.clientY }, frameRect);
+
+    applyPreviewTransform({
+      scale: nextScale,
+      x: focalPoint.x - (focalPoint.x - currentTransform.x) * scaleRatio,
+      y: focalPoint.y - (focalPoint.y - currentTransform.y) * scaleRatio,
+    });
+  }
+
+  function handlePreviewPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || !previewImage) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    previewPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    beginPreviewGesture(event.currentTarget);
+  }
+
+  function handlePreviewPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!previewPointersRef.current.has(event.pointerId)) return;
+
+    event.preventDefault();
+    previewPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    const gesture = previewGestureRef.current;
+    if (!gesture) return;
+
+    if (gesture.type === 'pinch') {
+      const first = previewPointersRef.current.get(gesture.pointerIds[0]);
+      const second = previewPointersRef.current.get(gesture.pointerIds[1]);
+      if (!first || !second || gesture.startDistance <= 0) {
+        beginPreviewGesture(event.currentTarget);
+        return;
+      }
+
+      const center = getPreviewPointerCenter(first, second);
+      const frameRect = event.currentTarget.getBoundingClientRect();
+      const focalPoint = getPreviewFocalPoint(center, frameRect);
+      const nextScale = clamp(
+        gesture.startTransform.scale * (getPreviewPointerDistance(first, second) / gesture.startDistance),
+        minPreviewScale,
+        maxPreviewScale,
+      );
+      const sampledX = (gesture.startFocal.x - gesture.startTransform.x) / gesture.startTransform.scale;
+      const sampledY = (gesture.startFocal.y - gesture.startTransform.y) / gesture.startTransform.scale;
+
+      applyPreviewTransform({
+        scale: nextScale,
+        x: focalPoint.x - sampledX * nextScale,
+        y: focalPoint.y - sampledY * nextScale,
+      });
+      return;
+    }
+
+    const pointer = previewPointersRef.current.get(gesture.pointerId);
+    if (!pointer) return;
+
+    applyPreviewTransform({
+      ...gesture.startTransform,
+      x: gesture.startTransform.x + pointer.x - gesture.startClientX,
+      y: gesture.startTransform.y + pointer.y - gesture.startClientY,
+    });
+  }
+
+  function handlePreviewPointerEnd(event: PointerEvent<HTMLDivElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    previewPointersRef.current.delete(event.pointerId);
+    beginPreviewGesture(event.currentTarget);
+  }
+
+  function handlePreviewDoubleClick(event: MouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+
+    if (previewTransformRef.current.scale > 1.001) {
+      resetPreviewTransform();
+      return;
+    }
+
+    const frameRect = event.currentTarget.getBoundingClientRect();
+    const focalPoint = getPreviewFocalPoint({ x: event.clientX, y: event.clientY }, frameRect);
+    const nextScale = 2;
+
+    applyPreviewTransform({
+      scale: nextScale,
+      x: focalPoint.x - focalPoint.x * nextScale,
+      y: focalPoint.y - focalPoint.y * nextScale,
+    });
   }
 
   function confirmDeleteSavedReference() {
@@ -579,8 +784,27 @@ export function ReferenceLibrary({
             </button>
           </div>
 
-          <div className="reference-preview-image">
-            <img src={previewImage.src} alt="" />
+          <div
+            className="reference-preview-image"
+            ref={previewFrameRef}
+            data-zoomed={previewTransform.scale > 1.001}
+            data-panning={isPreviewPanning}
+            onWheel={handlePreviewWheel}
+            onPointerDown={handlePreviewPointerDown}
+            onPointerMove={handlePreviewPointerMove}
+            onPointerUp={handlePreviewPointerEnd}
+            onPointerCancel={handlePreviewPointerEnd}
+            onDoubleClick={handlePreviewDoubleClick}
+          >
+            <img
+              ref={previewImageRef}
+              src={previewImage.src}
+              alt=""
+              draggable={false}
+              style={{
+                transform: `translate3d(${previewTransform.x}px, ${previewTransform.y}px, 0) scale(${previewTransform.scale})`,
+              }}
+            />
           </div>
 
           <div className="reference-preview-details">
@@ -782,6 +1006,53 @@ function shuffleItems<T>(items: T[]) {
   }
 
   return shuffled;
+}
+
+function clampPreviewTransform(
+  transform: PreviewTransform,
+  frame: HTMLDivElement | null,
+  image: HTMLImageElement | null,
+): PreviewTransform {
+  const scale = clamp(transform.scale, minPreviewScale, maxPreviewScale);
+
+  if (scale <= 1.001 || !frame || !image) {
+    return defaultPreviewTransform;
+  }
+
+  const frameWidth = frame.clientWidth;
+  const frameHeight = frame.clientHeight;
+  const imageWidth = image.offsetWidth;
+  const imageHeight = image.offsetHeight;
+  const maxX = Math.max(0, (imageWidth * scale - frameWidth) / 2 + 18);
+  const maxY = Math.max(0, (imageHeight * scale - frameHeight) / 2 + 18);
+
+  return {
+    scale,
+    x: clamp(transform.x, -maxX, maxX),
+    y: clamp(transform.y, -maxY, maxY),
+  };
+}
+
+function getPreviewPointerDistance(first: PreviewPointer, second: PreviewPointer) {
+  return Math.hypot(second.x - first.x, second.y - first.y);
+}
+
+function getPreviewPointerCenter(first: PreviewPointer, second: PreviewPointer) {
+  return {
+    x: (first.x + second.x) / 2,
+    y: (first.y + second.y) / 2,
+  };
+}
+
+function getPreviewFocalPoint(point: PreviewPointer, frameRect: DOMRect) {
+  return {
+    x: point.x - frameRect.left - frameRect.width / 2,
+    y: point.y - frameRect.top - frameRect.height / 2,
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function formatSourceSummary(image: ReferenceImage) {
