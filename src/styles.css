@@ -590,13 +590,14 @@ button:disabled,
 
 .library-intent {
   display: grid;
-  gap: 4px;
+  gap: 5px;
+  max-width: 34rem;
   padding: 2px 0 4px;
 }
 
 .library-intent strong {
   color: #f5f5f7;
-  font-size: 18px;
+  font-size: 21px;
   font-weight: 400;
 }
 
@@ -1201,12 +1202,41 @@ button:disabled,
 }
 
 .saved-card-main span,
-.saved-empty-card span {
+.saved-empty-state {
   display: grid;
   gap: 4px;
   min-width: 0;
   padding: 14px;
   border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.saved-empty-state {
+  place-items: center;
+  align-content: center;
+  justify-self: center;
+  width: min(100%, 360px);
+  min-height: min(48vh, 360px);
+  padding: 32px 18px;
+  border-top: 0;
+  color: #a1a1a6;
+  text-align: center;
+}
+
+.saved-empty-state svg {
+  color: #7ab7ff;
+}
+
+.saved-empty-state strong {
+  color: #f5f5f7;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.saved-empty-state span {
+  max-width: 18rem;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .saved-card small {
@@ -1261,24 +1291,6 @@ button:disabled,
 
 .saved-card-delete:hover {
   background: rgb(255 255 255 / 0.12);
-}
-
-.saved-empty-card {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: center;
-  min-height: 96px;
-  padding: 14px;
-}
-
-.saved-empty-card > svg {
-  justify-self: center;
-  color: #7ab7ff;
-}
-
-.saved-empty-card span {
-  padding: 0;
-  border-top: 0;
 }
 
 /* Edit */

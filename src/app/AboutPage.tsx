@@ -43,6 +43,14 @@ export function AboutPage({ onClose }: AboutPageProps) {
           </section>
 
           <section className="about-section">
+            <h3>Saving References</h3>
+            <p>
+              Use Save reference to keep a setup in the Saved tab. Once saved, that reference updates automatically as
+              you keep working on it. Choosing the same image again from Library starts fresh.
+            </p>
+          </section>
+
+          <section className="about-section">
             <h3>About Scott</h3>
             <p>
               Scott is an Australian painter interested in classical technique, careful observation, and practical tools

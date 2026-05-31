@@ -2,6 +2,7 @@ import {
   Aperture,
   ArrowLeft,
   Bookmark,
+  CheckCircle2,
   CloudSun,
   Contrast,
   Crop,
@@ -56,6 +57,7 @@ type WorkspaceProps = {
   onOpenAbout: () => void;
   onChange: (nextState: WorkspaceState) => void;
   hasCustomDefaultSettings: boolean;
+  isCurrentReferenceSaved: boolean;
   onSaveReference: (state: WorkspaceState) => void;
   onSaveDefaultSettings: (state: WorkspaceState) => void;
   onApplyDefaultSettings: () => void;
@@ -90,6 +92,7 @@ export function Workspace({
   onOpenAbout,
   onChange,
   hasCustomDefaultSettings,
+  isCurrentReferenceSaved,
   onSaveReference,
   onSaveDefaultSettings,
   onApplyDefaultSettings,
@@ -543,6 +546,11 @@ export function Workspace({
       return;
     }
 
+    if (isCurrentReferenceSaved) {
+      leaveWorkspace();
+      return;
+    }
+
     closeTransientUi();
     setIsLeavePromptOpen(true);
   }
@@ -571,6 +579,11 @@ export function Workspace({
     setIsWorkspaceMenuOpen(false);
     onSaveReference(state);
     setWorkspaceNotice('Reference saved');
+  }
+
+  function saveReferenceAndLeave() {
+    onSaveReference(state);
+    leaveWorkspace();
   }
 
   function saveWorkspaceDefault() {
@@ -1209,9 +1222,15 @@ export function Workspace({
                 <FileDown size={15} />
                 <span>Export palette</span>
               </button>
-              <button type="button" role="menuitem" onClick={saveReference}>
-                <Bookmark size={15} />
-                <span>Save reference</span>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={saveReference}
+                disabled={isCurrentReferenceSaved}
+                title={isCurrentReferenceSaved ? 'Changes are saved automatically' : 'Save this reference'}
+              >
+                {isCurrentReferenceSaved ? <CheckCircle2 size={15} /> : <Bookmark size={15} />}
+                <span>{isCurrentReferenceSaved ? 'Auto saving' : 'Save reference'}</span>
               </button>
               <button type="button" role="menuitem" onClick={saveWorkspaceDefault}>
                 <Save size={15} />
@@ -1327,16 +1346,15 @@ export function Workspace({
               <X size={16} />
             </button>
             <div>
-              <strong id="leave-workspace-title">Leave this workspace?</strong>
-              <span>You can continue this setup later from Upload. Download a copy first if you want to keep this view as an image.</span>
+              <strong id="leave-workspace-title">Leave workspace?</strong>
+              <span>Save this reference if you want to return to this setup later.</span>
             </div>
             <div className="workspace-leave-actions">
               <button type="button" className="secondary-button" onClick={() => setIsLeavePromptOpen(false)}>
                 Stay
               </button>
-              <button type="button" className="secondary-button" onClick={downloadWorkspacePreview}>
-                <Download size={14} />
-                <span>Download</span>
+              <button type="button" className="secondary-button" onClick={saveReferenceAndLeave}>
+                Save
               </button>
               <button type="button" className="primary-action-button" onClick={leaveWorkspace}>
                 Leave

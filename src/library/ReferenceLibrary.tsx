@@ -701,12 +701,12 @@ export function ReferenceLibrary({
           <div className="saved-panel">
             <div className="saved-intent">
               <strong>Saved</strong>
-              <span>References you can return to quickly.</span>
+              <span>Saved references remember your canvas, grid, values, filters, and palette.</span>
             </div>
 
-            <div className="saved-card-list">
-              {savedReferences.length > 0 ? (
-                savedReferences.map((savedReference) => {
+            {savedReferences.length > 0 ? (
+              <div className="saved-card-list">
+                {savedReferences.map((savedReference) => {
                   const image = savedReference.state.image;
                   if (!image) return null;
 
@@ -730,18 +730,15 @@ export function ReferenceLibrary({
                       </button>
                     </article>
                   );
-                })
-              ) : (
-                <div className="saved-card saved-empty-card">
-                  <History size={22} />
-                  <span>
-                    <small>Saved references</small>
-                    <strong>Nothing saved yet</strong>
-                    <em>Use Save reference from the workspace menu.</em>
-                  </span>
-                </div>
-              )}
-            </div>
+                })}
+              </div>
+            ) : (
+              <div className="saved-empty-state">
+                <Bookmark size={24} />
+                <strong>Nothing saved yet</strong>
+                <span>Open a reference, then use Save reference from the workspace menu.</span>
+              </div>
+            )}
           </div>
         ) : null}
       </section>
@@ -868,9 +865,10 @@ export function ReferenceLibrary({
               <X size={16} />
             </button>
             <div>
-              <strong id="delete-saved-reference-title">Delete saved reference?</strong>
+              <strong id="delete-saved-reference-title">Remove saved reference?</strong>
               <span>
-                Remove {savedReferencePendingDelete.state.image?.title ?? 'this reference'} from Saved. The library image stays in the app.
+                Remove {savedReferencePendingDelete.state.image?.title ?? 'this reference'} from Saved. This will not delete the
+                original image.
               </span>
             </div>
             <div className="workspace-reset-actions">
@@ -890,9 +888,9 @@ export function ReferenceLibrary({
 }
 
 function formatSavedReferenceDate(timestamp: number | null) {
-  if (!timestamp) return 'Saved recently';
+  if (!timestamp) return 'Updated recently';
 
-  return `Saved ${new Intl.DateTimeFormat(undefined, {
+  return `Updated ${new Intl.DateTimeFormat(undefined, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

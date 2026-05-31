@@ -203,6 +203,10 @@ export function App() {
     updateWorkspaceState(nextState);
   }
 
+  const isCurrentReferenceSaved = Boolean(
+    workspaceState.image && activeSavedReferenceId === getSavedReferenceId(workspaceState.image),
+  );
+
   return (
     <div className="app-shell" data-view={view}>
       {view === 'gallery' ? (
@@ -224,6 +228,7 @@ export function App() {
           onBack={() => setView('gallery')}
           onChange={updateWorkspaceState}
           hasCustomDefaultSettings={defaultSettings.isCustom}
+          isCurrentReferenceSaved={isCurrentReferenceSaved}
           onSaveReference={saveCurrentReference}
           onSaveDefaultSettings={saveCurrentSettingsAsDefault}
           onApplyDefaultSettings={applyDefaultSettingsToCurrentReference}
