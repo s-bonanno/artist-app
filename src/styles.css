@@ -887,6 +887,27 @@ button:disabled,
   text-underline-offset: 3px;
 }
 
+.reference-preview-description button {
+  display: inline;
+  padding: 0;
+  border: 0;
+  color: #7ab7ff;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgb(122 183 255 / 0.36);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.reference-preview-description button:focus-visible {
+  outline: 1px solid rgb(122 183 255 / 0.6);
+  outline-offset: 3px;
+}
+
 .reference-preview-meta,
 .reference-preview-tags {
   display: flex;
@@ -940,6 +961,80 @@ button:disabled,
   font-size: 12px;
   font-weight: 500;
   text-decoration: none;
+}
+
+.reference-related-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  align-items: end;
+  padding: 0 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgb(0 0 0 / 0.24);
+}
+
+.reference-related-sheet {
+  display: grid;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 3px;
+  background: rgb(29 29 31 / 0.98);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.48);
+}
+
+.reference-related-sheet-header {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.reference-related-sheet-header button {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: #f5f5f7;
+  background: transparent;
+  cursor: pointer;
+}
+
+.reference-related-sheet-header strong {
+  overflow: hidden;
+  color: #f5f5f7;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-related-sheet-header span {
+  justify-self: center;
+  color: #8f8f95;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reference-related-cards {
+  display: grid;
+  grid-auto-columns: minmax(128px, 38vw);
+  grid-auto-flow: column;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 0 10px 10px;
+  scrollbar-width: none;
+}
+
+.reference-related-cards::-webkit-scrollbar {
+  display: none;
+}
+
+.reference-related-card img {
+  aspect-ratio: 4 / 5;
 }
 
 .reference-preview-meta span,
@@ -2382,6 +2477,22 @@ input[type="range"]::-moz-range-thumb {
 
   .reference-preview-details .primary-action-button {
     margin-top: 4px;
+  }
+
+  .reference-related-overlay {
+    justify-items: end;
+    padding: calc(64px + env(safe-area-inset-top, 0px)) 10px 10px;
+    background: rgb(0 0 0 / 0.18);
+  }
+
+  .reference-related-sheet {
+    width: clamp(372px, 31vw, 448px);
+  }
+
+  .reference-related-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-flow: initial;
+    grid-auto-columns: initial;
   }
 
   .edit-screen {

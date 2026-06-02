@@ -393,7 +393,7 @@ const managerHtml = String.raw`<!doctype html>
 
       .manager-toolbar {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(170px, 220px);
+        grid-template-columns: minmax(0, 1fr) auto minmax(170px, 220px);
         gap: 10px;
         padding: 14px 18px;
         border-bottom: 1px solid var(--border);
@@ -408,6 +408,25 @@ const managerHtml = String.raw`<!doctype html>
         border-radius: 3px;
         color: var(--text);
         background: var(--panel);
+      }
+
+      .filter-button {
+        min-height: 38px;
+        padding: 0 12px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        color: var(--text);
+        background: var(--panel);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .filter-button[aria-pressed="true"] {
+        color: #05101d;
+        border-color: var(--blue);
+        background: var(--blue);
       }
 
       .manager-status {
@@ -576,12 +595,13 @@ const managerHtml = String.raw`<!doctype html>
 
       <section class="manager-toolbar">
         <input id="searchInput" type="search" placeholder="Search title, artist, category, tags..." />
+        <button class="filter-button" id="missingYearButton" type="button" aria-pressed="false">Missing year</button>
         <div class="manager-status" id="statusText">Loading...</div>
       </section>
 
       <section class="manager-help" aria-label="Library manager instructions">
         <strong>How to use this</strong>
-        <span>Edit tags or collections with comma-separated words. Tick remove if you want an image taken out of the library metadata, then click Save changes.</span>
+        <span>Edit years as plain text. Edit tags or collections with comma-separated words. Tick remove if you want an image taken out of the library metadata, then click Save changes.</span>
         <span>When you are happy, ask Codex: <code>I updated the library, can you check and commit it?</code> I will review the diff, run the build, commit, and push if you want.</span>
       </section>
 
@@ -593,10 +613,12 @@ const managerHtml = String.raw`<!doctype html>
       const state = {
         references: [],
         query: '',
+        missingYearOnly: false,
       };
 
       const grid = document.querySelector('#referenceGrid');
       const searchInput = document.querySelector('#searchInput');
+      const missingYearButton = document.querySelector('#missingYearButton');
       const saveButton = document.querySelector('#saveButton');
       const resetButton = document.querySelector('#resetButton');
       const statusText = document.querySelector('#statusText');
@@ -611,6 +633,10 @@ const managerHtml = String.raw`<!doctype html>
 
       resetButton.addEventListener('click', loadReferences);
       saveButton.addEventListener('click', saveReferences);
+      missingYearButton.addEventListener('click', () => {
+        state.missingYearOnly = !state.missingYearOnly;
+        render();
+      });
 
       async function loadReferences() {
         setStatus('Loading...');
@@ -672,6 +698,7 @@ const managerHtml = String.raw`<!doctype html>
         const thumbnail = escapeHtml(getThumbnailPath(reference.thumbnailSrc || reference.src));
         const tags = escapeHtml((reference.tags || []).join(', '));
         const collections = escapeHtml((reference.collections || []).join(', '));
+        const year = escapeHtml(reference.year || '');
         const checked = reference.deleted ? 'checked' : '';
 
         return [
@@ -682,6 +709,10 @@ const managerHtml = String.raw`<!doctype html>
           '      <strong title="' + title + '">' + title + '</strong>',
           '      <span>' + meta + '</span>',
           '    </div>',
+          '    <label>',
+          '      Year',
+          '      <input data-field="year" data-id="' + id + '" type="text" value="' + year + '" placeholder="Leave blank if unsure" />',
+          '    </label>',
           '    <label>',
           '      Tags',
           '      <input data-field="tags" data-id="' + id + '" type="text" value="' + tags + '" />',
@@ -702,7 +733,7 @@ const managerHtml = String.raw`<!doctype html>
       function handleTextInput(event) {
         const reference = findReference(event.currentTarget.dataset.id);
         const field = event.currentTarget.dataset.field;
-        reference[field] = splitList(event.currentTarget.value);
+        reference[field] = field === 'year' ? normalizeText(event.currentTarget.value) : splitList(event.currentTarget.value);
         reference.dirty = true;
         saveButton.disabled = false;
         updateStatus();
@@ -723,13 +754,27 @@ const managerHtml = String.raw`<!doctype html>
       }
 
       function referenceMatchesQuery(reference) {
+        if (state.missingYearOnly && normalizeText(reference.year)) return false;
         if (!state.query) return true;
 
-        return [reference.title, reference.artist, reference.category, reference.id, ...(reference.tags || []), ...(reference.collections || [])]
+        return [
+          reference.title,
+          reference.artist,
+          reference.year,
+          reference.category,
+          reference.id,
+          ...(reference.tags || []),
+          ...(reference.collections || []),
+        ]
           .filter(Boolean)
           .join(' ')
           .toLowerCase()
           .includes(state.query);
+      }
+
+      function normalizeText(value) {
+        const normalized = String(value ?? '').trim();
+        return normalized || undefined;
       }
 
       function splitList(value) {
@@ -739,13 +784,16 @@ const managerHtml = String.raw`<!doctype html>
       function updateStatus() {
         const dirtyCount = state.references.filter((reference) => reference.dirty).length;
         const deletedCount = state.references.filter((reference) => reference.deleted).length;
+        const missingYearCount = state.references.filter((reference) => !normalizeText(reference.year)).length;
         const totalCount = state.references.length;
         const parts = [totalCount + ' references'];
 
         if (dirtyCount) parts.push(dirtyCount + ' changed');
         if (deletedCount) parts.push(deletedCount + ' marked for removal');
+        if (state.missingYearOnly) parts.push(missingYearCount + ' missing year');
 
         setStatus(parts.join(' · '));
+        missingYearButton.setAttribute('aria-pressed', String(state.missingYearOnly));
       }
 
       function getThumbnailPath(path) {

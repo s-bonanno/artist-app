@@ -169,6 +169,7 @@ export function ReferenceLibrary({
   const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
   const [previewTransform, setPreviewTransform] = useState<PreviewTransform>(defaultPreviewTransform);
   const [isPreviewPanning, setIsPreviewPanning] = useState(false);
+  const [isRelatedOpen, setIsRelatedOpen] = useState(false);
   const [savedReferencePendingDeleteId, setSavedReferencePendingDeleteId] = useState<string | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
   const previewFrameRef = useRef<HTMLDivElement | null>(null);
@@ -223,6 +224,11 @@ export function ReferenceLibrary({
       })
       .filter((group) => group.references.length > 0);
   }, [references]);
+  const relatedPreviewReferences = useMemo(() => {
+    if (!previewImage) return [];
+
+    return getRelatedReferences(previewImage, references);
+  }, [previewImage, references]);
   const isLibraryOverview = activeCategoryId === 'overview' && !activeCollection;
 
   useEffect(() => {
@@ -242,6 +248,7 @@ export function ReferenceLibrary({
 
   useEffect(() => {
     resetPreviewTransform();
+    setIsRelatedOpen(false);
   }, [previewImage?.id]);
 
   function handleUpload(file: File | undefined) {
@@ -262,6 +269,11 @@ export function ReferenceLibrary({
 
   function openLibraryPreview(reference: ReferenceImage) {
     setPreviewImage(reference);
+  }
+
+  function closeLibraryPreview() {
+    setPreviewImage(null);
+    setIsRelatedOpen(false);
   }
 
   function usePreviewReference() {
@@ -772,11 +784,11 @@ export function ReferenceLibrary({
             <button type="button" className="top-icon-button workspace-info-button" title="About Art Assistant" onClick={onOpenAbout}>
               <Info size={18} />
             </button>
-            <button type="button" className="top-icon-button" title="Back to library" onClick={() => setPreviewImage(null)}>
+            <button type="button" className="top-icon-button" title="Back to library" onClick={closeLibraryPreview}>
               <ArrowLeft size={20} />
             </button>
             <strong>Preview</strong>
-            <button type="button" className="top-icon-button reference-preview-close-button" title="Close preview" onClick={() => setPreviewImage(null)}>
+            <button type="button" className="top-icon-button reference-preview-close-button" title="Close preview" onClick={closeLibraryPreview}>
               <X size={20} />
             </button>
           </div>
@@ -825,7 +837,17 @@ export function ReferenceLibrary({
                   {previewImage.year ? `, ${previewImage.year}` : ''}
                 </small>
               ) : null}
-              <span>{previewImage.description ?? previewImage.category ?? 'Library reference'}</span>
+              <span className="reference-preview-description">
+                {previewImage.description ?? previewImage.category ?? 'Library reference'}
+                {relatedPreviewReferences.length > 0 ? (
+                  <>
+                    {' '}
+                    <button type="button" onClick={() => setIsRelatedOpen(true)}>
+                      More like this
+                    </button>
+                  </>
+                ) : null}
+              </span>
             </div>
 
             {previewImage.sourceUrl ? (
@@ -850,6 +872,41 @@ export function ReferenceLibrary({
               Use reference
             </button>
           </div>
+
+          {isRelatedOpen && relatedPreviewReferences.length > 0 ? (
+            <div className="reference-related-overlay" role="presentation" onClick={() => setIsRelatedOpen(false)}>
+              <section
+                className="reference-related-sheet"
+                role="dialog"
+                aria-label="More like this"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="reference-related-sheet-header">
+                  <button type="button" title="Close suggestions" onClick={() => setIsRelatedOpen(false)}>
+                    <X size={16} />
+                  </button>
+                  <strong>More like this</strong>
+                  <span aria-hidden="true" />
+                </div>
+                <div className="reference-related-cards">
+                  {relatedPreviewReferences.map((reference) => (
+                    <button
+                      type="button"
+                      className="gallery-card reference-related-card"
+                      key={reference.id}
+                      onClick={() => openLibraryPreview(reference)}
+                    >
+                      <img src={reference.thumbnailSrc ?? reference.src} alt="" />
+                      <span>
+                        <strong>{reference.title}</strong>
+                        <small>{reference.artist ?? reference.category}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -953,6 +1010,49 @@ function getShelfReferences(references: ReferenceImage[], shelf: LibraryShelf) {
 
       return secondFeatured - firstFeatured;
     });
+}
+
+function getRelatedReferences(reference: ReferenceImage, references: ReferenceImage[]) {
+  if (reference.tags?.includes('bargue')) return [];
+
+  const referenceTags = new Set(reference.tags ?? []);
+  const referenceBrowseTags = [...referenceTags].filter((tag) => browseCategoryTags.has(tag));
+  const studyTags = new Set([
+    'academic',
+    'classical',
+    'composition',
+    'edges',
+    'featured',
+    'horse',
+    'landscape',
+    'light',
+    'movement',
+    'realism',
+  ]);
+
+  return references
+    .filter((candidate) => {
+      return candidate.id !== reference.id && !candidate.tags?.includes('bargue') && candidate.sourceType === 'library';
+    })
+    .map((candidate) => {
+      const candidateTags = new Set(candidate.tags ?? []);
+      const sharedBrowseTags = referenceBrowseTags.filter((tag) => candidateTags.has(tag)).length;
+      const sharedStudyTags = [...referenceTags].filter((tag) => candidateTags.has(tag) && studyTags.has(tag)).length;
+      const sameArtist = Boolean(reference.artist && candidate.artist === reference.artist);
+      const sameCategory = Boolean(reference.category && candidate.category === reference.category);
+      const featured = candidateTags.has('featured') ? 1 : 0;
+      const score = (sameArtist ? 12 : 0) + sharedBrowseTags * 5 + sharedStudyTags * 2 + (sameCategory ? 2 : 0) + featured;
+
+      return { candidate, score };
+    })
+    .filter(({ score }) => score >= 5)
+    .sort((first, second) => {
+      if (second.score !== first.score) return second.score - first.score;
+
+      return first.candidate.title.localeCompare(second.candidate.title);
+    })
+    .slice(0, 3)
+    .map(({ candidate }) => candidate);
 }
 
 function referenceMatchesTag(reference: ReferenceImage, tag: string) {
