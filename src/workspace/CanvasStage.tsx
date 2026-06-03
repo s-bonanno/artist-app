@@ -70,6 +70,9 @@ const defaultViewTransform: ViewTransform = {
   panY: 0,
 };
 
+const maxWorkspaceBackingPixels = 16_000_000;
+const maxWorkspaceRenderLongSide = 4800;
+const workspaceRenderQualityStep = 0.25;
 const paletteSampleSize = 3;
 const minViewZoom = 1;
 const maxViewZoom = 10;
@@ -82,6 +85,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const sampleLoupeRef = useRef<HTMLCanvasElement | null>(null);
     const loadedImageRef = useRef<HTMLImageElement | null>(null);
+    const logicalCanvasSizeRef = useRef(getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm));
+    const renderQualityRef = useRef(1);
     const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
     const lastViewPointerRef = useRef<{ x: number; y: number } | null>(null);
     const touchPointersRef = useRef<Map<number, PointerPosition>>(new Map());
@@ -181,6 +186,15 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }, [state.canvas, state.filters, state.grid, state.values, state.viewport]);
 
     useEffect(() => {
+      const { width, height } = logicalCanvasSizeRef.current;
+      const nextRenderQuality = getWorkspaceRenderQuality(width, height, viewTransform.zoom);
+
+      if (Math.abs(nextRenderQuality - renderQualityRef.current) > 0.001) {
+        draw();
+      }
+    }, [viewTransform.zoom]);
+
+    useEffect(() => {
       if (interactionMode !== 'sample') {
         activeSamplePointerRef.current = null;
         lastSampleRef.current = null;
@@ -202,22 +216,29 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       if (!ctx) return;
 
       const { width, height, pixelsPerCm } = getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm);
+      const renderQuality = getWorkspaceRenderQuality(width, height, viewTransformRef.current.zoom);
+      const backingWidth = Math.round(width * renderQuality);
+      const backingHeight = Math.round(height * renderQuality);
       const renderScale = Math.max(width, height) / BASE_CANVAS_RENDER_LONG_SIDE;
       const displayRect = canvas.getBoundingClientRect();
       const labelScale = displayRect.width > 0 ? Math.max(renderScale, width / displayRect.width) : renderScale;
-      canvas.width = width;
-      canvas.height = height;
+      logicalCanvasSizeRef.current = { width, height, pixelsPerCm };
+      renderQualityRef.current = renderQuality;
+      canvas.width = backingWidth;
+      canvas.height = backingHeight;
 
       ctx.fillStyle = '#111214';
-      ctx.fillRect(0, 0, width, height);
+      ctx.fillRect(0, 0, backingWidth, backingHeight);
 
       const loadedImage = loadedImageRef.current;
       if (loadedImage) {
         const imageRect = getImageDrawRect(width, height, loadedImage, state.viewport);
 
-        drawReferenceImage(ctx, loadedImage, imageRect, width, height, state, renderScale);
+        drawReferenceImage(ctx, loadedImage, imageRect, width, height, state, renderScale, renderQuality);
       }
 
+      ctx.save();
+      ctx.scale(renderQuality, renderQuality);
       drawGridGuides(ctx, width, height, {
         enabled: state.grid.enabled && !state.filters.showOriginal,
         type: state.grid.type,
@@ -231,13 +252,15 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         labelScale,
         showMeasurements: state.grid.showMeasurements,
       });
+      ctx.restore();
     }
 
     function getCanvasScale(canvas: HTMLCanvasElement) {
       const rect = canvas.getBoundingClientRect();
+      const logicalSize = logicalCanvasSizeRef.current;
       return {
-        x: canvas.width / rect.width,
-        y: canvas.height / rect.height,
+        x: logicalSize.width / rect.width,
+        y: logicalSize.height / rect.height,
       };
     }
 
@@ -272,7 +295,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       if (!loadedImage || !stageRect) return null;
 
       const point = getCanvasPoint(event);
-      const imageRect = getImageDrawRect(canvas.width, canvas.height, loadedImage, state.viewport);
+      const logicalSize = logicalCanvasSizeRef.current;
+      const imageRect = getImageDrawRect(logicalSize.width, logicalSize.height, loadedImage, state.viewport);
       const isInsideImage =
         point.x >= imageRect.x &&
         point.x <= imageRect.x + imageRect.width &&
@@ -447,8 +471,9 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         const currentCanvasCenter = getCanvasPointFromClient(canvas, center.x, center.y);
         const nextZoom = clamp(currentGesture.startViewport.zoom * distanceRatio, minImageZoom, maxImageZoom);
         const zoomRatio = nextZoom / currentGesture.startViewport.zoom;
-        const canvasCenterX = canvas.width / 2;
-        const canvasCenterY = canvas.height / 2;
+        const logicalSize = logicalCanvasSizeRef.current;
+        const canvasCenterX = logicalSize.width / 2;
+        const canvasCenterY = logicalSize.height / 2;
 
         applyViewport({
           zoom: nextZoom,
@@ -487,13 +512,14 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const ctx = loupe.getContext('2d');
       if (!ctx) return;
 
-      const sourceSize = 34;
+      const renderQuality = renderQualityRef.current;
+      const sourceSize = 34 * renderQuality;
       ctx.clearRect(0, 0, loupe.width, loupe.height);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(
         canvas,
-        clamp(canvasX - sourceSize / 2, 0, canvas.width - sourceSize),
-        clamp(canvasY - sourceSize / 2, 0, canvas.height - sourceSize),
+        clamp(canvasX * renderQuality - sourceSize / 2, 0, canvas.width - sourceSize),
+        clamp(canvasY * renderQuality - sourceSize / 2, 0, canvas.height - sourceSize),
         sourceSize,
         sourceSize,
         0,
@@ -714,8 +740,9 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
       const nextZoom = clamp(currentZoom * zoomFactor, minImageZoom, maxImageZoom);
       const zoomRatio = nextZoom / currentZoom;
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
+      const logicalSize = logicalCanvasSizeRef.current;
+      const centerX = logicalSize.width / 2;
+      const centerY = logicalSize.height / 2;
 
       applyViewport({
         zoom: nextZoom,
@@ -816,6 +843,17 @@ function getImageDrawRect(
   };
 }
 
+function getWorkspaceRenderQuality(width: number, height: number, viewZoom: number) {
+  const longSide = Math.max(width, height);
+  const pixelCount = width * height;
+  const maxScaleForArea = Math.sqrt(maxWorkspaceBackingPixels / pixelCount);
+  const maxScaleForLongSide = maxWorkspaceRenderLongSide / longSide;
+  const maxScale = Math.max(1, Math.min(maxScaleForArea, maxScaleForLongSide));
+  const steppedScale = Math.ceil(Math.max(1, viewZoom) / workspaceRenderQualityStep) * workspaceRenderQualityStep;
+
+  return Math.min(maxScale, steppedScale);
+}
+
 function drawReferenceImage(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement,
@@ -824,11 +862,16 @@ function drawReferenceImage(
   canvasHeight: number,
   state: WorkspaceState,
   renderScale: number,
+  renderQuality: number,
 ) {
+  const scaledImageRect = scaleImageDrawRect(imageRect, renderQuality);
+  const backingCanvasWidth = Math.round(canvasWidth * renderQuality);
+  const backingCanvasHeight = Math.round(canvasHeight * renderQuality);
+
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(image, imageRect.x, imageRect.y, imageRect.width, imageRect.height);
+  ctx.drawImage(image, scaledImageRect.x, scaledImageRect.y, scaledImageRect.width, scaledImageRect.height);
   ctx.restore();
 
   if (state.filters.showOriginal) return;
@@ -838,12 +881,12 @@ function drawReferenceImage(
   const shouldApplyValueMap = shouldApplyValues(state.values);
   if (!shouldApplyBaseFilters && !shouldApplyTonalFilters && !shouldApplyValueMap) return;
 
-  const visibleRect = getVisibleImageDataRect(imageRect, canvasWidth, canvasHeight);
+  const visibleRect = getVisibleImageDataRect(scaledImageRect, backingCanvasWidth, backingCanvasHeight);
   if (!visibleRect) return;
 
   const imageData = ctx.getImageData(visibleRect.x, visibleRect.y, visibleRect.width, visibleRect.height);
   if (shouldApplyBaseFilters) {
-    applyBaseFilterAdjustments(imageData, state.filters, renderScale);
+    applyBaseFilterAdjustments(imageData, state.filters, renderScale * renderQuality);
   }
   if (shouldApplyTonalFilters) {
     applyTonalFilterAdjustments(imageData, state.filters);
@@ -852,6 +895,15 @@ function drawReferenceImage(
     applyValuesToImageData(imageData, state.values);
   }
   ctx.putImageData(imageData, visibleRect.x, visibleRect.y);
+}
+
+function scaleImageDrawRect(imageRect: ImageDrawRect, scale: number): ImageDrawRect {
+  return {
+    x: imageRect.x * scale,
+    y: imageRect.y * scale,
+    width: imageRect.width * scale,
+    height: imageRect.height * scale,
+  };
 }
 
 function getVisibleImageDataRect(imageRect: ImageDrawRect, canvasWidth: number, canvasHeight: number) {
