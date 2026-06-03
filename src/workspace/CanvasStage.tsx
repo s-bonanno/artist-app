@@ -72,6 +72,8 @@ const defaultViewTransform: ViewTransform = {
 
 const maxWorkspaceBackingPixels = 16_000_000;
 const maxWorkspaceRenderLongSide = 4800;
+const maxIOSWorkspaceBackingPixels = 12_000_000;
+const maxIOSWorkspaceRenderLongSide = 4096;
 const workspaceRenderQualityStep = 0.25;
 const paletteSampleSize = 3;
 const minViewZoom = 1;
@@ -844,14 +846,38 @@ function getImageDrawRect(
 }
 
 function getWorkspaceRenderQuality(width: number, height: number, viewZoom: number) {
+  const limits = getWorkspaceBackingLimits();
   const longSide = Math.max(width, height);
   const pixelCount = width * height;
-  const maxScaleForArea = Math.sqrt(maxWorkspaceBackingPixels / pixelCount);
-  const maxScaleForLongSide = maxWorkspaceRenderLongSide / longSide;
+  const maxScaleForArea = Math.sqrt(limits.maxPixels / pixelCount);
+  const maxScaleForLongSide = limits.maxLongSide / longSide;
   const maxScale = Math.max(1, Math.min(maxScaleForArea, maxScaleForLongSide));
   const steppedScale = Math.ceil(Math.max(1, viewZoom) / workspaceRenderQualityStep) * workspaceRenderQualityStep;
 
   return Math.min(maxScale, steppedScale);
+}
+
+function getWorkspaceBackingLimits() {
+  if (isIOSWebKit()) {
+    return {
+      maxPixels: maxIOSWorkspaceBackingPixels,
+      maxLongSide: maxIOSWorkspaceRenderLongSide,
+    };
+  }
+
+  return {
+    maxPixels: maxWorkspaceBackingPixels,
+    maxLongSide: maxWorkspaceRenderLongSide,
+  };
+}
+
+function isIOSWebKit() {
+  if (typeof navigator === 'undefined') return false;
+
+  const platform = navigator.platform || '';
+  const userAgent = navigator.userAgent || '';
+
+  return /iPad|iPhone|iPod/.test(userAgent) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
 function drawReferenceImage(

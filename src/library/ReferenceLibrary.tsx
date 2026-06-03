@@ -179,6 +179,7 @@ export function ReferenceLibrary({
   const [isRelatedOpen, setIsRelatedOpen] = useState(false);
   const [savedReferencePendingDeleteId, setSavedReferencePendingDeleteId] = useState<string | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
+  const previewDialogRef = useRef<HTMLElement | null>(null);
   const previewFrameRef = useRef<HTMLDivElement | null>(null);
   const previewImageRef = useRef<HTMLImageElement | null>(null);
   const previewTransformRef = useRef<PreviewTransform>(defaultPreviewTransform);
@@ -263,6 +264,16 @@ export function ReferenceLibrary({
   useEffect(() => {
     if (!previewImage) return undefined;
 
+    const frameId = window.requestAnimationFrame(() => {
+      previewDialogRef.current?.focus();
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [previewImage?.id]);
+
+  useEffect(() => {
+    if (!previewImage) return undefined;
+
     const frameId = window.requestAnimationFrame(updatePreviewBaseSize);
     const resizeObserver = new ResizeObserver(updatePreviewBaseSize);
 
@@ -293,6 +304,12 @@ export function ReferenceLibrary({
   }
 
   function openLibraryPreview(reference: ReferenceImage) {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    if (previewImage?.id === reference.id) return;
+
     setIsPreviewImageLoading(true);
     setPreviewImage(reference);
   }
@@ -813,7 +830,19 @@ export function ReferenceLibrary({
       </nav>
 
       {previewImage ? (
-        <section className="reference-preview" aria-label="Reference preview" role="dialog" aria-modal="true">
+        <section
+          className="reference-preview"
+          ref={previewDialogRef}
+          tabIndex={-1}
+          aria-label="Reference preview"
+          role="dialog"
+          aria-modal="true"
+          onKeyDown={(event) => {
+            if (event.code === 'Space' && event.target === event.currentTarget) {
+              event.preventDefault();
+            }
+          }}
+        >
           <div className="reference-preview-topbar" data-layout="preview">
             <button type="button" className="top-icon-button workspace-info-button" title="About Art Assistant" onClick={onOpenAbout}>
               <Info size={18} />

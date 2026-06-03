@@ -775,6 +775,11 @@ button:disabled,
   background: #000000;
 }
 
+.reference-preview:focus,
+.reference-preview:focus-visible {
+  outline: none;
+}
+
 .reference-preview-topbar {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr) 48px;
