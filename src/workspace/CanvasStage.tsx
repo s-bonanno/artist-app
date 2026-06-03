@@ -36,6 +36,11 @@ type ViewTransform = {
   panY: number;
 };
 
+type CanvasDisplaySize = {
+  width: number;
+  height: number;
+};
+
 type PointerPosition = {
   x: number;
   y: number;
@@ -102,6 +107,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const [isViewPanning, setIsViewPanning] = useState(false);
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [viewTransform, setViewTransform] = useState<ViewTransform>(defaultViewTransform);
+    const [canvasDisplaySize, setCanvasDisplaySize] = useState<CanvasDisplaySize | null>(null);
     const [samplePreview, setSamplePreview] = useState<SamplePreview | null>(null);
     const isViewAdjusted =
       viewTransform.zoom > 1.001 || Math.abs(viewTransform.panX) > 0.5 || Math.abs(viewTransform.panY) > 0.5;
@@ -195,6 +201,22 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         draw();
       }
     }, [viewTransform.zoom]);
+
+    useEffect(() => {
+      const stage = stageRef.current;
+      if (!stage) return undefined;
+
+      const updateCanvasDisplaySize = () => {
+        setCanvasDisplaySize(getCanvasDisplaySize(stage, getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm)));
+      };
+
+      updateCanvasDisplaySize();
+
+      const resizeObserver = new ResizeObserver(updateCanvasDisplaySize);
+      resizeObserver.observe(stage);
+
+      return () => resizeObserver.disconnect();
+    }, [state.canvas.widthCm, state.canvas.heightCm]);
 
     useEffect(() => {
       if (interactionMode !== 'sample') {
@@ -786,7 +808,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
           className="canvas-view-pan"
           style={{ transform: `translate3d(${viewTransform.panX}px, ${viewTransform.panY}px, 0)` }}
         >
-          <div className="canvas-view-scale" style={{ transform: `scale(${viewTransform.zoom})` }}>
+          <div className="canvas-view-scale">
             <canvas
               ref={canvasRef}
               aria-label="Reference workspace canvas"
@@ -801,6 +823,16 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
               onPointerCancel={cancelPointer}
               onPointerLeave={handlePointerLeave}
               onWheel={handleWheel}
+              style={
+                canvasDisplaySize
+                  ? {
+                      width: `${canvasDisplaySize.width * viewTransform.zoom}px`,
+                      height: `${canvasDisplaySize.height * viewTransform.zoom}px`,
+                      maxWidth: 'none',
+                      maxHeight: 'none',
+                    }
+                  : undefined
+              }
             />
           </div>
         </div>
@@ -842,6 +874,25 @@ function getImageDrawRect(
     y: (height - drawHeight) / 2 + viewport.panY,
     width: drawWidth,
     height: drawHeight,
+  };
+}
+
+function getCanvasDisplaySize(
+  stage: HTMLDivElement,
+  logicalSize: { width: number; height: number },
+): CanvasDisplaySize {
+  const styles = window.getComputedStyle(stage);
+  const horizontalPadding = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
+  const verticalPadding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
+  const availableWidth = Math.max(1, stage.clientWidth - horizontalPadding);
+  const availableHeight = Math.max(1, stage.clientHeight - verticalPadding);
+  const fitWidth = Math.min(availableWidth, 980);
+  const fitHeight = availableHeight;
+  const fitScale = Math.min(fitWidth / logicalSize.width, fitHeight / logicalSize.height, 1);
+
+  return {
+    width: Math.max(1, logicalSize.width * fitScale),
+    height: Math.max(1, logicalSize.height * fitScale),
   };
 }
 
