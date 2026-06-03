@@ -77,8 +77,8 @@ const defaultViewTransform: ViewTransform = {
 
 const maxWorkspaceBackingPixels = 16_000_000;
 const maxWorkspaceRenderLongSide = 4800;
-const maxIOSWorkspaceBackingPixels = 12_000_000;
-const maxIOSWorkspaceRenderLongSide = 4096;
+const maxIOSWorkspaceBackingPixels = 16_000_000;
+const maxIOSWorkspaceRenderLongSide = 4800;
 const workspaceRenderQualityStep = 0.25;
 const paletteSampleSize = 3;
 const minViewZoom = 1;
