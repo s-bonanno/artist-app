@@ -425,11 +425,19 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
     function startTouchGesture(canvas: HTMLCanvasElement) {
       const pointers = getActiveTouchPointers();
+      const previousGesture = touchGestureRef.current;
       if (!pointers.length) {
         touchGestureRef.current = null;
         setIsPanning(false);
         setIsViewPanning(false);
         setCanvasDisplayZoom(viewTransformRef.current.zoom);
+        return;
+      }
+
+      if (pointers.length === 1 && previousGesture?.target === 'view' && previousGesture.pointerIds.length > 1) {
+        touchGestureRef.current = null;
+        setIsPanning(false);
+        setIsViewPanning(false);
         return;
       }
 
