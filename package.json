@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "library:manager": "node scripts/library-manager.mjs",
-    "thumbnails": "node scripts/generate-thumbnails.mjs"
+    "thumbnails": "node scripts/generate-thumbnails.mjs",
+    "references:upgrade": "node scripts/upgrade-commons-references.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",

@@ -72,7 +72,9 @@ const defaultViewTransform: ViewTransform = {
 
 const paletteSampleSize = 3;
 const minViewZoom = 1;
-const maxViewZoom = 6;
+const maxViewZoom = 10;
+const minImageZoom = 0.2;
+const maxImageZoom = 8;
 
 export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
   function CanvasStage({ image, interactionMode, state, onSampleColor, onViewportChange }, forwardedRef) {
@@ -443,7 +445,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       if (currentGesture.target === 'image') {
         const currentCanvasCenter = getCanvasPointFromClient(canvas, center.x, center.y);
-        const nextZoom = clamp(currentGesture.startViewport.zoom * distanceRatio, 0.2, 4);
+        const nextZoom = clamp(currentGesture.startViewport.zoom * distanceRatio, minImageZoom, maxImageZoom);
         const zoomRatio = nextZoom / currentGesture.startViewport.zoom;
         const canvasCenterX = canvas.width / 2;
         const canvasCenterY = canvas.height / 2;
@@ -710,7 +712,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const pointer = getCanvasPointFromClient(canvas, event.clientX, event.clientY);
       const currentZoom = viewportRef.current.zoom;
       const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
-      const nextZoom = Math.min(4, Math.max(0.2, currentZoom * zoomFactor));
+      const nextZoom = clamp(currentZoom * zoomFactor, minImageZoom, maxImageZoom);
       const zoomRatio = nextZoom / currentZoom;
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;

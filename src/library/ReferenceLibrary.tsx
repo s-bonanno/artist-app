@@ -45,6 +45,11 @@ type PreviewTransform = {
   y: number;
 };
 
+type PreviewImageSize = {
+  width: number;
+  height: number;
+};
+
 type PreviewPointer = {
   x: number;
   y: number;
@@ -62,7 +67,7 @@ type PreviewGesture =
       type: 'pinch';
       pointerIds: [number, number];
       startDistance: number;
-      startFocal: PreviewPointer;
+      startSample: PreviewPointer;
       startTransform: PreviewTransform;
     };
 
@@ -72,7 +77,7 @@ const defaultPreviewTransform: PreviewTransform = {
   y: 0,
 };
 const minPreviewScale = 1;
-const maxPreviewScale = 6;
+const maxPreviewScale = 10;
 
 const libraryCategories: LibraryCategory[] = [
   { id: 'all', label: 'All', description: 'Every reference in the library.' },
@@ -168,6 +173,7 @@ export function ReferenceLibrary({
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
   const [previewTransform, setPreviewTransform] = useState<PreviewTransform>(defaultPreviewTransform);
+  const [previewBaseSize, setPreviewBaseSize] = useState<PreviewImageSize | null>(null);
   const [isPreviewPanning, setIsPreviewPanning] = useState(false);
   const [isRelatedOpen, setIsRelatedOpen] = useState(false);
   const [savedReferencePendingDeleteId, setSavedReferencePendingDeleteId] = useState<string | null>(null);
@@ -248,7 +254,24 @@ export function ReferenceLibrary({
 
   useEffect(() => {
     resetPreviewTransform();
+    setPreviewBaseSize(null);
     setIsRelatedOpen(false);
+  }, [previewImage?.id]);
+
+  useEffect(() => {
+    if (!previewImage) return undefined;
+
+    const frameId = window.requestAnimationFrame(updatePreviewBaseSize);
+    const resizeObserver = new ResizeObserver(updatePreviewBaseSize);
+
+    if (previewFrameRef.current) {
+      resizeObserver.observe(previewFrameRef.current);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+    };
   }, [previewImage?.id]);
 
   function handleUpload(file: File | undefined) {
@@ -290,6 +313,19 @@ export function ReferenceLibrary({
     setIsPreviewPanning(false);
   }
 
+  function updatePreviewBaseSize() {
+    const nextSize = getPreviewBaseImageSize(previewFrameRef.current, previewImageRef.current);
+
+    setPreviewBaseSize(nextSize);
+
+    if (previewFrameRef.current && previewImageRef.current) {
+      const clampedTransform = clampPreviewTransform(previewTransformRef.current, previewFrameRef.current, previewImageRef.current);
+
+      previewTransformRef.current = clampedTransform;
+      setPreviewTransform(clampedTransform);
+    }
+  }
+
   function applyPreviewTransform(nextTransform: PreviewTransform) {
     const clampedTransform = clampPreviewTransform(nextTransform, previewFrameRef.current, previewImageRef.current);
 
@@ -307,12 +343,13 @@ export function ReferenceLibrary({
       const second = secondPointer[1];
       const center = getPreviewPointerCenter(first, second);
       const frameRect = frame.getBoundingClientRect();
+      const focalPoint = getPreviewFocalPoint(center, frameRect);
 
       previewGestureRef.current = {
         type: 'pinch',
         pointerIds: [firstPointer[0], secondPointer[0]],
         startDistance: getPreviewPointerDistance(first, second),
-        startFocal: getPreviewFocalPoint(center, frameRect),
+        startSample: getPreviewSampleFromTransform(focalPoint, currentTransform, frame, previewImageRef.current),
         startTransform: currentTransform,
       };
       setIsPreviewPanning(true);
@@ -343,15 +380,12 @@ export function ReferenceLibrary({
     event.preventDefault();
     const currentTransform = previewTransformRef.current;
     const nextScale = clamp(currentTransform.scale * Math.exp(-event.deltaY * 0.002), minPreviewScale, maxPreviewScale);
-    const scaleRatio = nextScale / currentTransform.scale;
     const frameRect = event.currentTarget.getBoundingClientRect();
-    const focalPoint = getPreviewFocalPoint({ x: event.clientX, y: event.clientY }, frameRect);
+    const pointer = { x: event.clientX, y: event.clientY };
+    const focalPoint = getPreviewFocalPoint(pointer, frameRect);
+    const samplePoint = getPreviewSampleFromTransform(focalPoint, currentTransform, event.currentTarget, previewImageRef.current);
 
-    applyPreviewTransform({
-      scale: nextScale,
-      x: focalPoint.x - (focalPoint.x - currentTransform.x) * scaleRatio,
-      y: focalPoint.y - (focalPoint.y - currentTransform.y) * scaleRatio,
-    });
+    applyPreviewTransform(getPreviewTransformForSample(focalPoint, samplePoint, nextScale, event.currentTarget, previewImageRef.current));
   }
 
   function handlePreviewPointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -388,14 +422,7 @@ export function ReferenceLibrary({
         minPreviewScale,
         maxPreviewScale,
       );
-      const sampledX = (gesture.startFocal.x - gesture.startTransform.x) / gesture.startTransform.scale;
-      const sampledY = (gesture.startFocal.y - gesture.startTransform.y) / gesture.startTransform.scale;
-
-      applyPreviewTransform({
-        scale: nextScale,
-        x: focalPoint.x - sampledX * nextScale,
-        y: focalPoint.y - sampledY * nextScale,
-      });
+      applyPreviewTransform(getPreviewTransformForSample(focalPoint, gesture.startSample, nextScale, event.currentTarget, previewImageRef.current));
       return;
     }
 
@@ -427,14 +454,12 @@ export function ReferenceLibrary({
     }
 
     const frameRect = event.currentTarget.getBoundingClientRect();
-    const focalPoint = getPreviewFocalPoint({ x: event.clientX, y: event.clientY }, frameRect);
+    const pointer = { x: event.clientX, y: event.clientY };
+    const focalPoint = getPreviewFocalPoint(pointer, frameRect);
+    const samplePoint = getPreviewSampleFromTransform(focalPoint, previewTransformRef.current, event.currentTarget, previewImageRef.current);
     const nextScale = 2;
 
-    applyPreviewTransform({
-      scale: nextScale,
-      x: focalPoint.x - focalPoint.x * nextScale,
-      y: focalPoint.y - focalPoint.y * nextScale,
-    });
+    applyPreviewTransform(getPreviewTransformForSample(focalPoint, samplePoint, nextScale, event.currentTarget, previewImageRef.current));
   }
 
   function confirmDeleteSavedReference() {
@@ -810,8 +835,13 @@ export function ReferenceLibrary({
               src={previewImage.src}
               alt=""
               draggable={false}
+              onLoad={updatePreviewBaseSize}
               style={{
-                transform: `translate3d(${previewTransform.x}px, ${previewTransform.y}px, 0) scale(${previewTransform.scale})`,
+                width: previewBaseSize ? `${previewBaseSize.width * previewTransform.scale}px` : undefined,
+                height: previewBaseSize ? `${previewBaseSize.height * previewTransform.scale}px` : undefined,
+                maxWidth: previewBaseSize ? 'none' : undefined,
+                maxHeight: previewBaseSize ? 'none' : undefined,
+                transform: `translate(-50%, -50%) translate3d(${previewTransform.x}px, ${previewTransform.y}px, 0)`,
               }}
             />
           </div>
@@ -1117,17 +1147,89 @@ function clampPreviewTransform(
     return defaultPreviewTransform;
   }
 
+  const baseSize = getPreviewBaseImageSize(frame, image);
+  if (!baseSize) {
+    return defaultPreviewTransform;
+  }
+
   const frameWidth = frame.clientWidth;
   const frameHeight = frame.clientHeight;
-  const imageWidth = image.offsetWidth;
-  const imageHeight = image.offsetHeight;
-  const maxX = Math.max(0, (imageWidth * scale - frameWidth) / 2 + 18);
-  const maxY = Math.max(0, (imageHeight * scale - frameHeight) / 2 + 18);
+  const imageWidth = baseSize.width * scale;
+  const imageHeight = baseSize.height * scale;
+  const maxX = Math.max(0, (imageWidth - frameWidth) / 2 + 18);
+  const maxY = Math.max(0, (imageHeight - frameHeight) / 2 + 18);
 
   return {
     scale,
     x: clamp(transform.x, -maxX, maxX),
     y: clamp(transform.y, -maxY, maxY),
+  };
+}
+
+function getPreviewBaseImageSize(frame: HTMLDivElement | null, image: HTMLImageElement | null): PreviewImageSize | null {
+  if (!frame || !image || !image.naturalWidth || !image.naturalHeight) {
+    return null;
+  }
+
+  const styles = window.getComputedStyle(frame);
+  const horizontalPadding = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
+  const verticalPadding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
+  const availableWidth = Math.max(1, frame.clientWidth - horizontalPadding);
+  const availableHeight = Math.max(1, frame.clientHeight - verticalPadding);
+  const fitScale = Math.min(availableWidth / image.naturalWidth, availableHeight / image.naturalHeight, 1);
+
+  return {
+    width: image.naturalWidth * fitScale,
+    height: image.naturalHeight * fitScale,
+  };
+}
+
+function getPreviewSampleFromTransform(
+  focalPoint: PreviewPointer,
+  transform: PreviewTransform,
+  frame: HTMLDivElement | null,
+  image: HTMLImageElement | null,
+): PreviewPointer {
+  const baseSize = getPreviewBaseImageSize(frame, image);
+
+  if (!baseSize) {
+    return { x: 0, y: 0 };
+  }
+
+  const scaledWidth = baseSize.width * transform.scale;
+  const scaledHeight = baseSize.height * transform.scale;
+
+  if (!scaledWidth || !scaledHeight) {
+    return { x: 0, y: 0 };
+  }
+
+  return {
+    x: (focalPoint.x - transform.x) / scaledWidth,
+    y: (focalPoint.y - transform.y) / scaledHeight,
+  };
+}
+
+function getPreviewTransformForSample(
+  focalPoint: PreviewPointer,
+  samplePoint: PreviewPointer,
+  scale: number,
+  frame: HTMLDivElement | null,
+  image: HTMLImageElement | null,
+): PreviewTransform {
+  const baseSize = getPreviewBaseImageSize(frame, image);
+
+  if (!baseSize) {
+    return {
+      scale,
+      x: focalPoint.x,
+      y: focalPoint.y,
+    };
+  }
+
+  return {
+    scale,
+    x: focalPoint.x - samplePoint.x * baseSize.width * scale,
+    y: focalPoint.y - samplePoint.y * baseSize.height * scale,
   };
 }
 

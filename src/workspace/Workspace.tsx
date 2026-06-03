@@ -84,7 +84,7 @@ const gridColorPresets = [
 const minValueLevels = 2;
 const maxValueLevels = 16;
 const minViewportZoom = 0.2;
-const maxViewportZoom = 4;
+const maxViewportZoom = 8;
 
 export function Workspace({
   state,
