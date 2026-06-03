@@ -174,6 +174,7 @@ export function ReferenceLibrary({
   const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
   const [previewTransform, setPreviewTransform] = useState<PreviewTransform>(defaultPreviewTransform);
   const [previewBaseSize, setPreviewBaseSize] = useState<PreviewImageSize | null>(null);
+  const [isPreviewImageLoading, setIsPreviewImageLoading] = useState(false);
   const [isPreviewPanning, setIsPreviewPanning] = useState(false);
   const [isRelatedOpen, setIsRelatedOpen] = useState(false);
   const [savedReferencePendingDeleteId, setSavedReferencePendingDeleteId] = useState<string | null>(null);
@@ -255,6 +256,7 @@ export function ReferenceLibrary({
   useEffect(() => {
     resetPreviewTransform();
     setPreviewBaseSize(null);
+    setIsPreviewImageLoading(Boolean(previewImage));
     setIsRelatedOpen(false);
   }, [previewImage?.id]);
 
@@ -291,10 +293,12 @@ export function ReferenceLibrary({
   }
 
   function openLibraryPreview(reference: ReferenceImage) {
+    setIsPreviewImageLoading(true);
     setPreviewImage(reference);
   }
 
   function closeLibraryPreview() {
+    setIsPreviewImageLoading(false);
     setPreviewImage(null);
     setIsRelatedOpen(false);
   }
@@ -324,6 +328,11 @@ export function ReferenceLibrary({
       previewTransformRef.current = clampedTransform;
       setPreviewTransform(clampedTransform);
     }
+  }
+
+  function handlePreviewImageLoad() {
+    updatePreviewBaseSize();
+    setIsPreviewImageLoading(false);
   }
 
   function applyPreviewTransform(nextTransform: PreviewTransform) {
@@ -823,6 +832,7 @@ export function ReferenceLibrary({
             ref={previewFrameRef}
             data-zoomed={previewTransform.scale > 1.001}
             data-panning={isPreviewPanning}
+            data-loading={isPreviewImageLoading}
             onWheel={handlePreviewWheel}
             onPointerDown={handlePreviewPointerDown}
             onPointerMove={handlePreviewPointerMove}
@@ -835,7 +845,8 @@ export function ReferenceLibrary({
               src={previewImage.src}
               alt=""
               draggable={false}
-              onLoad={updatePreviewBaseSize}
+              onLoad={handlePreviewImageLoad}
+              onError={() => setIsPreviewImageLoading(false)}
               style={{
                 width: previewBaseSize ? `${previewBaseSize.width * previewTransform.scale}px` : undefined,
                 height: previewBaseSize ? `${previewBaseSize.height * previewTransform.scale}px` : undefined,
@@ -844,6 +855,9 @@ export function ReferenceLibrary({
                 transform: `translate(-50%, -50%) translate3d(${previewTransform.x}px, ${previewTransform.y}px, 0)`,
               }}
             />
+            {isPreviewImageLoading ? (
+              <div className="reference-preview-loader" role="status" aria-label="Loading reference image" />
+            ) : null}
           </div>
 
           <div className="reference-preview-details">
