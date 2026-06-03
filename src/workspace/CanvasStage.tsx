@@ -108,11 +108,9 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [viewTransform, setViewTransform] = useState<ViewTransform>(defaultViewTransform);
     const [canvasDisplaySize, setCanvasDisplaySize] = useState<CanvasDisplaySize | null>(null);
-    const [canvasDisplayZoom, setCanvasDisplayZoom] = useState(1);
     const [samplePreview, setSamplePreview] = useState<SamplePreview | null>(null);
     const isViewAdjusted =
       viewTransform.zoom > 1.001 || Math.abs(viewTransform.panX) > 0.5 || Math.abs(viewTransform.panY) > 0.5;
-    const liveCanvasScale = canvasDisplayZoom > 0 ? viewTransform.zoom / canvasDisplayZoom : 1;
 
     useImperativeHandle(forwardedRef, () => canvasRef.current as HTMLCanvasElement, []);
 
@@ -290,13 +288,9 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       };
     }
 
-    function applyViewTransform(nextTransform: ViewTransform, commitCanvasZoom = true) {
+    function applyViewTransform(nextTransform: ViewTransform) {
       viewTransformRef.current = nextTransform;
       setViewTransform(nextTransform);
-
-      if (commitCanvasZoom) {
-        setCanvasDisplayZoom(nextTransform.zoom);
-      }
     }
 
     function applyViewport(nextViewport: WorkspaceState['viewport']) {
@@ -430,7 +424,6 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         touchGestureRef.current = null;
         setIsPanning(false);
         setIsViewPanning(false);
-        setCanvasDisplayZoom(viewTransformRef.current.zoom);
         return;
       }
 
@@ -445,10 +438,6 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const center = getPointerCenter(first, second);
       const target = interactionMode === 'pan' ? 'image' : 'view';
       const startViewTransform = viewTransformRef.current;
-
-      if (target === 'view') {
-        setCanvasDisplayZoom(startViewTransform.zoom);
-      }
 
       touchGestureRef.current = {
         target,
@@ -498,14 +487,11 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
           return;
         }
 
-        applyViewTransform(
-          {
-            ...currentGesture.startViewTransform,
-            panX: currentGesture.startViewTransform.panX + center.x - currentGesture.startClientCenter.x,
-            panY: currentGesture.startViewTransform.panY + center.y - currentGesture.startClientCenter.y,
-          },
-          false,
-        );
+        applyViewTransform({
+          ...currentGesture.startViewTransform,
+          panX: currentGesture.startViewTransform.panX + center.x - currentGesture.startClientCenter.x,
+          panY: currentGesture.startViewTransform.panY + center.y - currentGesture.startClientCenter.y,
+        });
         return;
       }
 
@@ -540,18 +526,15 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const nextZoom = clamp(currentGesture.startViewTransform.zoom * distanceRatio, minViewZoom, maxViewZoom);
       const zoomRatio = nextZoom / currentGesture.startViewTransform.zoom;
 
-      applyViewTransform(
-        {
-          zoom: nextZoom,
-          panX:
-            currentViewCenter.x -
-            (currentGesture.startViewCenter.x - currentGesture.startViewTransform.panX) * zoomRatio,
-          panY:
-            currentViewCenter.y -
-            (currentGesture.startViewCenter.y - currentGesture.startViewTransform.panY) * zoomRatio,
-        },
-        false,
-      );
+      applyViewTransform({
+        zoom: nextZoom,
+        panX:
+          currentViewCenter.x -
+          (currentGesture.startViewCenter.x - currentGesture.startViewTransform.panX) * zoomRatio,
+        panY:
+          currentViewCenter.y -
+          (currentGesture.startViewCenter.y - currentGesture.startViewTransform.panY) * zoomRatio,
+      });
     }
 
     function drawSampleLoupe(canvasX: number, canvasY: number) {
@@ -832,9 +815,12 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       <div className="canvas-stage" ref={stageRef} data-sampling={interactionMode === 'sample'}>
         <div
           className="canvas-view-pan"
-          style={{ transform: `translate3d(${viewTransform.panX}px, ${viewTransform.panY}px, 0)` }}
+          style={{
+            left: `calc(50% + ${viewTransform.panX}px)`,
+            top: `calc(50% + ${viewTransform.panY}px)`,
+          }}
         >
-          <div className="canvas-view-scale" style={{ transform: `scale(${liveCanvasScale})` }}>
+          <div className="canvas-view-scale">
             <canvas
               ref={canvasRef}
               aria-label="Reference workspace canvas"
@@ -852,8 +838,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
               style={
                 canvasDisplaySize
                   ? {
-                      width: `${canvasDisplaySize.width * canvasDisplayZoom}px`,
-                      height: `${canvasDisplaySize.height * canvasDisplayZoom}px`,
+                      width: `${canvasDisplaySize.width * viewTransform.zoom}px`,
+                      height: `${canvasDisplaySize.height * viewTransform.zoom}px`,
                       maxWidth: 'none',
                       maxHeight: 'none',
                     }

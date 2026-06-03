@@ -1682,6 +1682,11 @@ button:disabled,
   will-change: transform;
 }
 
+.canvas-view-pan {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
 .canvas-stage canvas {
   display: block;
   width: auto;
