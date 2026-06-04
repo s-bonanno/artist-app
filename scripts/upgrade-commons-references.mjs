@@ -13,7 +13,10 @@ const minCurrentLongEdge = readNumberArg('--min-current-long-edge', 0);
 const maxCurrentLongEdge = readNumberArg('--max-current-long-edge', Number.POSITIVE_INFINITY);
 const limit = readNumberArg('--limit', Number.POSITIVE_INFINITY);
 const checkLimit = readNumberArg('--check-limit', Number.POSITIVE_INFINITY);
+const delayMs = readNumberArg('--delay-ms', 0);
+const maxDownloadMb = readNumberArg('--max-download-mb', Number.POSITIVE_INFINITY);
 const shouldApply = process.argv.includes('--apply');
+const shouldDownloadOriginal = process.argv.includes('--original');
 const includeIds = readListArg('--include');
 const skipIds = readListArg('--skip');
 
@@ -32,6 +35,9 @@ let checkedCount = 0;
 for (const reference of candidates) {
   if (results.filter((result) => result.status === 'upgraded').length >= limit) break;
   if (checkedCount >= checkLimit) break;
+  if (checkedCount > 0 && delayMs > 0) {
+    await sleep(delayMs);
+  }
 
   checkedCount += 1;
   console.log(
@@ -39,10 +45,29 @@ for (const reference of candidates) {
   );
 
   const candidatePath = join(tmpRoot, basename(reference.src));
-  const downloadUrl = toCommonsFilePathUrl(reference.sourceUrl, targetLongEdge);
+  const downloadUrl = toCommonsFilePathUrl(reference.sourceUrl, shouldDownloadOriginal ? null : targetLongEdge);
+  const curlArgs = [
+    '-L',
+    '--fail',
+    '--retry',
+    '3',
+    '--retry-delay',
+    '2',
+    '--retry-all-errors',
+    '--user-agent',
+    'ArtAssistantLocalDev/1.0',
+    '-o',
+    candidatePath,
+    downloadUrl,
+  ];
+
+  if (Number.isFinite(maxDownloadMb)) {
+    curlArgs.splice(curlArgs.length - 1, 0, '--max-filesize', String(Math.round(maxDownloadMb * 1024 * 1024)));
+  }
+
   const download = spawnSync(
     'curl',
-    ['-L', '--fail', '--retry', '3', '--retry-delay', '2', '--retry-all-errors', '--user-agent', 'ArtAssistantLocalDev/1.0', '-o', candidatePath, downloadUrl],
+    curlArgs,
     { stdio: shouldApply ? 'inherit' : 'ignore' },
   );
 
@@ -51,8 +76,16 @@ for (const reference of candidates) {
     continue;
   }
 
-  const normalizedPath = await capLongEdge(candidatePath);
-  const candidate = readImageInfo(normalizedPath);
+  let normalizedPath;
+  let candidate;
+
+  try {
+    normalizedPath = await capLongEdge(candidatePath);
+    candidate = readImageInfo(normalizedPath);
+  } catch (error) {
+    results.push({ ...reference, status: 'invalid-download' });
+    continue;
+  }
 
   if (!isImprovement(reference.current, candidate)) {
     results.push({ ...reference, candidate, status: 'same-or-smaller' });
@@ -183,7 +216,13 @@ function toCommonsFilePathUrl(sourceUrl, width) {
   const marker = '/wiki/File:';
   const fileName = url.pathname.slice(url.pathname.indexOf(marker) + marker.length);
 
-  return `https://commons.wikimedia.org/wiki/Special:FilePath/${fileName}?width=${width}`;
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${fileName}${width ? `?width=${width}` : ''}`;
+}
+
+function sleep(ms) {
+  return new Promise((resolveSleep) => {
+    setTimeout(resolveSleep, ms);
+  });
 }
 
 async function capLongEdge(imagePath) {
