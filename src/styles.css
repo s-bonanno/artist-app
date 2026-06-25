@@ -280,17 +280,9 @@ button:disabled,
   position: relative;
   overflow: hidden;
   background-color: #161616;
+  background-clip: padding-box;
   background-position: center;
   background-size: cover;
-}
-
-.continue-hero::before {
-  position: absolute;
-  inset: 1px auto 1px 1px;
-  width: 2px;
-  background: #161616;
-  content: "";
-  pointer-events: none;
 }
 
 .continue-hero span {
