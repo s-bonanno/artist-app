@@ -39,6 +39,8 @@ type ViewTransform = {
 type CanvasDisplaySize = {
   width: number;
   height: number;
+  centerX: number;
+  centerY: number;
 };
 
 type PointerPosition = {
@@ -408,12 +410,12 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function getStagePointFromClient(clientX: number, clientY: number) {
-      const stageRect = stageRef.current?.getBoundingClientRect();
-      if (!stageRect) return { x: 0, y: 0 };
+      const stageCenter = getStageContentCenter(stageRef.current);
+      if (!stageCenter) return { x: 0, y: 0 };
 
       return {
-        x: clientX - (stageRect.left + stageRect.width / 2),
-        y: clientY - (stageRect.top + stageRect.height / 2),
+        x: clientX - stageCenter.clientX,
+        y: clientY - stageCenter.clientY,
       };
     }
 
@@ -785,9 +787,9 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function zoomViewAtPoint(event: WheelEvent<HTMLCanvasElement>) {
-      const stageRect = stageRef.current?.getBoundingClientRect();
-      const centerX = stageRect ? stageRect.left + stageRect.width / 2 : event.clientX;
-      const centerY = stageRect ? stageRect.top + stageRect.height / 2 : event.clientY;
+      const stageCenter = getStageContentCenter(stageRef.current);
+      const centerX = stageCenter?.clientX ?? event.clientX;
+      const centerY = stageCenter?.clientY ?? event.clientY;
       const pointerX = event.clientX - centerX;
       const pointerY = event.clientY - centerY;
 
@@ -816,8 +818,12 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         <div
           className="canvas-view-pan"
           style={{
-            left: `calc(50% + ${viewTransform.panX}px)`,
-            top: `calc(50% + ${viewTransform.panY}px)`,
+            left: canvasDisplaySize
+              ? `${canvasDisplaySize.centerX + viewTransform.panX}px`
+              : `calc(50% + ${viewTransform.panX}px)`,
+            top: canvasDisplaySize
+              ? `${canvasDisplaySize.centerY + viewTransform.panY}px`
+              : `calc(50% + ${viewTransform.panY}px)`,
           }}
         >
           <div className="canvas-view-scale">
@@ -905,6 +911,26 @@ function getCanvasDisplaySize(
   return {
     width: Math.max(1, logicalSize.width * fitScale),
     height: Math.max(1, logicalSize.height * fitScale),
+    centerX: Number.parseFloat(styles.paddingLeft) + availableWidth / 2,
+    centerY: Number.parseFloat(styles.paddingTop) + availableHeight / 2,
+  };
+}
+
+function getStageContentCenter(stage: HTMLDivElement | null) {
+  if (!stage) return null;
+
+  const rect = stage.getBoundingClientRect();
+  const styles = window.getComputedStyle(stage);
+  const paddingLeft = Number.parseFloat(styles.paddingLeft);
+  const paddingRight = Number.parseFloat(styles.paddingRight);
+  const paddingTop = Number.parseFloat(styles.paddingTop);
+  const paddingBottom = Number.parseFloat(styles.paddingBottom);
+  const availableWidth = Math.max(1, stage.clientWidth - paddingLeft - paddingRight);
+  const availableHeight = Math.max(1, stage.clientHeight - paddingTop - paddingBottom);
+
+  return {
+    clientX: rect.left + paddingLeft + availableWidth / 2,
+    clientY: rect.top + paddingTop + availableHeight / 2,
   };
 }
 
