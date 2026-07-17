@@ -11,6 +11,13 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 html,
@@ -1714,6 +1721,10 @@ button:disabled,
   cursor: crosshair;
 }
 
+.canvas-stage canvas[data-color-isolate="true"] {
+  cursor: crosshair;
+}
+
 .canvas-stage canvas[data-view-pan-ready="true"] {
   cursor: grab;
 }
@@ -1890,6 +1901,107 @@ button:disabled,
 
 .tool-panel-content > * {
   transition: opacity 160ms ease;
+}
+
+.color-study-colors {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding-top: 2px;
+  overflow: hidden;
+}
+
+.color-study-colors-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #c9c9ce;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.color-study-processing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #929298;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.color-study-processing > span {
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-top-color: #d9d9dd;
+  border-radius: 50%;
+  animation: color-study-spin 700ms linear infinite;
+}
+
+.color-study-swatches {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+}
+
+.color-study-swatches button,
+.color-study-swatches > span {
+  aspect-ratio: 1;
+  width: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 2px;
+  scroll-snap-align: start;
+}
+
+.color-study-swatches button {
+  position: relative;
+  cursor: pointer;
+}
+
+.color-study-swatches button[data-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgb(255 255 255 / 0.76);
+  border-radius: 1px;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.32);
+}
+
+.color-study-swatches[data-loading="true"] > span {
+  border-color: rgb(255 255 255 / 0.06);
+  background: rgb(255 255 255 / 0.06);
+  animation: color-study-pulse 900ms ease-in-out infinite alternate;
+}
+
+.color-study-swatches[data-loading="true"] > span:nth-child(2n) {
+  animation-delay: 120ms;
+}
+
+.color-study-empty {
+  color: #85858b;
+  font-size: 11px;
+}
+
+.color-study-add-button {
+  justify-self: start;
+}
+
+@keyframes color-study-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes color-study-pulse {
+  to {
+    background: rgb(255 255 255 / 0.1);
+  }
 }
 
 .control-row,
@@ -2688,6 +2800,13 @@ input[type="range"]::-moz-range-thumb {
 
   .tool-panel-content {
     padding: 14px;
+  }
+
+  .color-study-swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 44px);
+    overflow: visible;
+    scroll-snap-type: none;
   }
 
   .control-row,

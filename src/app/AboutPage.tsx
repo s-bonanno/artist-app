@@ -34,11 +34,20 @@ export function AboutPage({ onClose }: AboutPageProps) {
           </section>
 
           <section className="about-section">
+            <h3>What’s New</h3>
+            <div className="about-steps">
+              <p>Study brings Value, Colour, and Grey analysis together in one focused tool.</p>
+              <p>Colour mode simplifies the reference into painterly colour shapes with three levels of detail.</p>
+              <p>Choose a detected colour or tap the image to isolate exact colour shapes, then add them to your palette.</p>
+            </div>
+          </section>
+
+          <section className="about-section">
             <h3>Getting Started</h3>
             <div className="about-steps">
               <p>Upload your own reference, or choose a study image from the library.</p>
               <p>Set the canvas size and grid so the reference can translate to a real painting surface.</p>
-              <p>Use Values, Filters, and Palette tools to study shape, tone, colour, and mixing notes.</p>
+              <p>Use Study, Filters, and Palette tools to explore shape, tone, colour, and mixing notes.</p>
             </div>
           </section>
 

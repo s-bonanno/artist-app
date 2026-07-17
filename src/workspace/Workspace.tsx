@@ -36,6 +36,7 @@ import { exportCanvas } from '../export/exportCanvas';
 import { exportPalette } from '../export/exportPalette';
 import type { GridGuideType } from '../grid/drawGrid';
 import type { ColorSample } from '../palette/paletteTypes';
+import type { SpatialColorSwatch } from '../palette/spatialColorStudy';
 import type { ValueMode } from '../values/valueTypes';
 import { CanvasStage } from './CanvasStage';
 import {
@@ -66,8 +67,9 @@ type WorkspaceProps = {
 type ActiveTool = 'canvas' | 'zoom' | 'grid' | 'values' | 'palette' | 'filters';
 
 const valueModes: Array<{ id: ValueMode; label: string }> = [
-  { id: 'map', label: 'Map' },
-  { id: 'grayscale', label: 'Gray' },
+  { id: 'map', label: 'Value' },
+  { id: 'color', label: 'Colour' },
+  { id: 'grayscale', label: 'Grey' },
 ];
 const gridGuideTypes: Array<{ id: GridGuideType; label: string }> = [
   { id: 'square', label: 'Square grid' },
@@ -83,6 +85,7 @@ const gridColorPresets = [
 ];
 const minValueLevels = 2;
 const maxValueLevels = 16;
+const colorDetailLabels = ['Low', 'Medium', 'High'];
 const minViewportZoom = 0.2;
 const maxViewportZoom = 8;
 
@@ -111,6 +114,11 @@ export function Workspace({
   const [isLeavePromptOpen, setIsLeavePromptOpen] = useState(false);
   const [isResetPromptOpen, setIsResetPromptOpen] = useState(false);
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
+  const [colorStudy, setColorStudy] = useState<{ processing: boolean; swatches: SpatialColorSwatch[] }>({
+    processing: false,
+    swatches: [],
+  });
+  const [highlightedColorStudyHex, setHighlightedColorStudyHex] = useState<string | null>(null);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const gridLimits = useMemo(
     () => getGridLimits(state.canvas.widthCm, state.canvas.heightCm, state.grid.unit),
@@ -133,6 +141,11 @@ export function Workspace({
     state.palette.swatches[state.palette.swatches.length - 1] ??
     null;
   const hasOpenToolPanel = Boolean(activeTool) && !isMoveZoomMode;
+  const isColorStudyMode = (
+    state.values.enabled
+    && state.values.mode === 'color'
+    && !state.filters.showOriginal
+  );
 
   useEffect(() => {
     if (!state.image?.src) {
@@ -173,6 +186,15 @@ export function Workspace({
     return () => window.clearTimeout(timeout);
   }, [workspaceNotice]);
 
+  useEffect(() => {
+    if (state.values.enabled && state.values.mode === 'color') return;
+    setHighlightedColorStudyHex(null);
+  }, [state.values.enabled, state.values.mode]);
+
+  useEffect(() => {
+    if (colorStudy.processing) setHighlightedColorStudyHex(null);
+  }, [colorStudy.processing]);
+
   function closeTool() {
     setActiveSlider(null);
     setIsPaletteSampling(false);
@@ -190,6 +212,7 @@ export function Workspace({
     setIsPaletteSampling(false);
     setIsMoveZoomMode(false);
     setIsWorkspaceMenuOpen(false);
+    if (tool !== 'values') setHighlightedColorStudyHex(null);
     setActiveTool((currentTool) => (currentTool === tool ? null : tool));
   }
 
@@ -287,6 +310,7 @@ export function Workspace({
     const levels = normalizeValueLevels(nextState.levels);
     const visibleLevels = Math.min(levels, Math.max(0, Math.round(nextState.visibleLevels)));
     const simplify = Math.min(10, Math.max(0, Math.round(nextState.simplify)));
+    const colorDetail = Math.min(2, Math.max(0, Math.round(nextState.colorDetail ?? 1)));
 
     onChange({
       ...state,
@@ -299,6 +323,7 @@ export function Workspace({
         levels,
         visibleLevels,
         simplify,
+        colorDetail,
         opacity: Math.min(1, Math.max(0, nextState.opacity)),
       },
     });
@@ -514,6 +539,38 @@ export function Workspace({
     });
   }
 
+  function addDetectedPalette() {
+    const existingHexes = new Set(state.palette.swatches.map((swatch) => swatch.hex.toLowerCase()));
+    const newColors = colorStudy.swatches.filter((swatch) => !existingHexes.has(swatch.hex.toLowerCase()));
+    if (newColors.length === 0) {
+      setWorkspaceNotice('Colours already in palette');
+      return;
+    }
+
+    const firstIndex = state.palette.swatches.length;
+    const newSwatches = newColors.map((swatch, index) => ({
+      ...createDetectedColorSample(swatch, imageDimensions),
+      id: createSwatchId(),
+      name: `Swatch ${firstIndex + index + 1}`,
+    }));
+
+    updatePalette({
+      swatches: [...state.palette.swatches, ...newSwatches],
+      selectedSwatchId: newSwatches[newSwatches.length - 1].id,
+    });
+    setWorkspaceNotice(`${newSwatches.length} colours added`);
+  }
+
+  function toggleColorStudyIsolation(hex: string) {
+    const isSelected = highlightedColorStudyHex === hex;
+    setHighlightedColorStudyHex(isSelected ? null : hex);
+
+    if (!isSelected && !window.matchMedia('(min-width: 960px) and (orientation: landscape)').matches) {
+      setActiveSlider(null);
+      setActiveTool(null);
+    }
+  }
+
   function removeSelectedSwatch() {
     if (!selectedSwatch) return;
 
@@ -526,12 +583,14 @@ export function Workspace({
   }
 
   function startPaletteSampling() {
+    setHighlightedColorStudyHex(null);
     setIsPaletteSampling(true);
   }
 
   function startMoveZoomMode() {
     setActiveSlider(null);
     setIsPaletteSampling(false);
+    setHighlightedColorStudyHex(null);
     setIsMoveZoomMode(true);
     setActiveTool('zoom');
   }
@@ -662,7 +721,7 @@ export function Workspace({
         <button
           type="button"
           className="icon-button compact visibility-button"
-          title={state.values.enabled ? 'Hide values' : 'Show values'}
+          title={state.values.enabled ? 'Hide study' : 'Show study'}
           data-visible={state.values.enabled}
           onClick={() => updateValues({ enabled: !state.values.enabled })}
         >
@@ -976,7 +1035,7 @@ export function Workspace({
           <div className="tool-panel-content">
             <div className="option-block">
               <span>Mode</span>
-              <div className="chip-control" data-options="2" aria-label="Values mode">
+              <div className="chip-control" data-options="3" aria-label="Study mode">
                 {valueModes.map((mode) => (
                   <button
                     key={mode.id}
@@ -990,7 +1049,7 @@ export function Workspace({
               </div>
             </div>
 
-            {state.values.mode !== 'grayscale' ? (
+            {state.values.mode === 'map' ? (
               <label className="slider-row" data-active-slider={activeSlider === 'values-levels'}>
                 <span>Levels</span>
                 <input
@@ -1006,33 +1065,109 @@ export function Workspace({
               </label>
             ) : null}
 
-            <label className="slider-row" data-active-slider={activeSlider === 'values-simplify'}>
-              <span>Simplify</span>
-              <input
-                type="range"
-                min="0"
-                max="10"
-                step="1"
-                value={state.values.simplify}
-                onChange={(event) => updateValues({ enabled: true, simplify: Number(event.target.value) })}
-                {...getSliderProps('values-simplify')}
-              />
-              <strong>{state.values.simplify === 0 ? 'Off' : state.values.simplify}</strong>
-            </label>
+            {state.values.mode === 'color' ? (
+              <>
+                <label className="slider-row" data-active-slider={activeSlider === 'values-color-detail'}>
+                  <span>Detail</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="1"
+                    value={state.values.colorDetail ?? 1}
+                    onChange={(event) => {
+                      setHighlightedColorStudyHex(null);
+                      updateValues({ enabled: true, colorDetail: Number(event.target.value) });
+                    }}
+                    {...getSliderProps('values-color-detail')}
+                  />
+                  <strong>{colorDetailLabels[state.values.colorDetail ?? 1]}</strong>
+                </label>
 
-            <label className="slider-row" data-active-slider={activeSlider === 'values-opacity'}>
-              <span>Opacity</span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={state.values.opacity}
-                onChange={(event) => updateValues({ enabled: true, opacity: Number(event.target.value) })}
-                {...getSliderProps('values-opacity')}
-              />
-              <strong>{Math.round(state.values.opacity * 100)}%</strong>
-            </label>
+                <label className="slider-row" data-active-slider={activeSlider === 'values-opacity'}>
+                  <span>Opacity</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={state.values.opacity}
+                    onChange={(event) => updateValues({ enabled: true, opacity: Number(event.target.value) })}
+                    {...getSliderProps('values-opacity')}
+                  />
+                  <strong>{Math.round(state.values.opacity * 100)}%</strong>
+                </label>
+
+                <section className="color-study-colors" aria-label="Detected colours">
+                  <div className="color-study-colors-heading">
+                    <span>Colours</span>
+                    {colorStudy.processing ? (
+                      <span className="color-study-processing" role="status">
+                        <span aria-hidden="true" />
+                        Analysing
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {colorStudy.swatches.length ? (
+                    <div className="color-study-swatches">
+                      {colorStudy.swatches.map((swatch) => {
+                        const isSelected = highlightedColorStudyHex === swatch.hex;
+
+                        return (
+                          <button
+                            key={swatch.hex}
+                            type="button"
+                            title={isSelected ? `Clear ${swatch.hex} isolation` : `Show where ${swatch.hex} appears`}
+                            aria-label={isSelected ? `Clear ${swatch.hex} isolation` : `Show where ${swatch.hex} appears`}
+                            aria-pressed={isSelected}
+                            data-selected={isSelected}
+                            style={{ backgroundColor: swatch.hex }}
+                            onClick={() => toggleColorStudyIsolation(swatch.hex)}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : colorStudy.processing ? (
+                    <div className="color-study-swatches" data-loading="true" aria-hidden="true">
+                      {Array.from({ length: 8 }, (_, index) => <span key={index} />)}
+                    </div>
+                  ) : (
+                    <span className="color-study-empty">Choose a reference to detect colours.</span>
+                  )}
+                </section>
+              </>
+            ) : (
+              <label className="slider-row" data-active-slider={activeSlider === 'values-simplify'}>
+                <span>Simplify</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="10"
+                  step="1"
+                  value={state.values.simplify}
+                  onChange={(event) => updateValues({ enabled: true, simplify: Number(event.target.value) })}
+                  {...getSliderProps('values-simplify')}
+                />
+                <strong>{state.values.simplify === 0 ? 'Off' : state.values.simplify}</strong>
+              </label>
+            )}
+
+            {state.values.mode !== 'color' ? (
+              <label className="slider-row" data-active-slider={activeSlider === 'values-opacity'}>
+                <span>Opacity</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={state.values.opacity}
+                  onChange={(event) => updateValues({ enabled: true, opacity: Number(event.target.value) })}
+                  {...getSliderProps('values-opacity')}
+                />
+                <strong>{Math.round(state.values.opacity * 100)}%</strong>
+              </label>
+            ) : null}
           </div>
         ) : null}
 
@@ -1262,6 +1397,11 @@ export function Workspace({
 
           if (!activeTool || isMoveZoomMode) return;
           if (activeTool === 'palette' && isPaletteSampling) return;
+          if (
+            activeTool === 'values'
+            && isColorStudyMode
+            && window.matchMedia('(min-width: 960px) and (orientation: landscape)').matches
+          ) return;
 
           closeTool();
         }}
@@ -1287,12 +1427,42 @@ export function Workspace({
             </button>
           </div>
         ) : null}
+        {isColorStudyMode && !isPaletteSampling && !isMoveZoomMode ? (
+          <div className="sampling-hint color-isolate-hint">
+            <PaletteIcon size={15} />
+            <span>{highlightedColorStudyHex ? 'Colour isolate' : 'Click image to isolate a colour'}</span>
+            {highlightedColorStudyHex ? (
+              <>
+                <span className="sample-session-swatch" style={{ backgroundColor: highlightedColorStudyHex }} />
+                <button
+                  type="button"
+                  className="sample-session-close"
+                  title="Clear colour isolation"
+                  onClick={() => setHighlightedColorStudyHex(null)}
+                >
+                  <X size={14} />
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <CanvasStage
           ref={canvasRef}
           image={state.image}
-          interactionMode={isPaletteSampling ? 'sample' : isMoveZoomMode ? 'pan' : 'locked'}
+          interactionMode={
+            isPaletteSampling
+              ? 'sample'
+              : isMoveZoomMode
+                ? 'pan'
+                : isColorStudyMode
+                  ? 'color-isolate'
+                  : 'locked'
+          }
           state={state}
+          highlightedColorStudyHex={highlightedColorStudyHex}
           onSampleColor={addSwatch}
+          onColorStudyPick={setHighlightedColorStudyHex}
+          onColorStudyChange={setColorStudy}
           onViewportChange={setViewport}
         />
       </div>
@@ -1321,7 +1491,7 @@ export function Workspace({
           </button>
           <button type="button" data-active={activeTool === 'values'} onClick={() => toggleTool('values')}>
             <Contrast size={19} />
-            <span>Values</span>
+            <span>Study</span>
           </button>
           <button type="button" data-active={activeTool === 'palette'} onClick={() => toggleTool('palette')}>
             <PaletteIcon size={19} />
@@ -1394,6 +1564,22 @@ export function Workspace({
   );
 }
 
+function createDetectedColorSample(
+  swatch: SpatialColorSwatch,
+  imageDimensions: { width: number; height: number } | null,
+): ColorSample {
+  return {
+    hex: swatch.hex,
+    rgb: [swatch.red, swatch.green, swatch.blue],
+    source: 'filtered',
+    sampleSize: 3,
+    imagePoint: {
+      x: Math.round((imageDimensions?.width ?? 0) / 2),
+      y: Math.round((imageDimensions?.height ?? 0) / 2),
+    },
+  };
+}
+
 function createSwatchId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -1422,7 +1608,7 @@ function getToolLabel(tool: ActiveTool) {
       return (
         <>
           <Contrast size={16} />
-          Values
+          Study
         </>
       );
     case 'palette':

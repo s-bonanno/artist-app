@@ -84,6 +84,7 @@ export const initialWorkspaceState: WorkspaceState = {
     levels: 4,
     visibleLevels: 3,
     simplify: 0,
+    colorDetail: 1,
     opacity: 1,
   },
   palette: {

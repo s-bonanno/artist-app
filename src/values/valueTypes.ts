@@ -1,4 +1,4 @@
-export type ValueMode = 'map' | 'grayscale';
+export type ValueMode = 'map' | 'color' | 'grayscale';
 
 export type ValueSettings = {
   enabled: boolean;
@@ -6,5 +6,6 @@ export type ValueSettings = {
   levels: number;
   visibleLevels: number;
   simplify: number;
+  colorDetail: number;
   opacity: number;
 };

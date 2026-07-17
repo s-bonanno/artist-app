@@ -25,6 +25,7 @@ export function shouldApplyValues(values: ValueSettings) {
 
 export function applyValuesToImageData(imageData: ImageData, values: ValueSettings) {
   if (!shouldApplyValues(values)) return imageData;
+  if (values.mode === 'color') return imageData;
 
   const data = imageData.data;
   const levels = normalizeNotanLevels(values.levels);
