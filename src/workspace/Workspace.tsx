@@ -1428,7 +1428,7 @@ export function Workspace({
           </div>
         ) : null}
         {isColorStudyMode && !isPaletteSampling && !isMoveZoomMode ? (
-          <div className="sampling-hint color-isolate-hint">
+          <div className="sampling-hint color-isolate-hint" data-active={Boolean(highlightedColorStudyHex)}>
             <PaletteIcon size={15} />
             <span>{highlightedColorStudyHex ? 'Colour isolate' : 'Click image to isolate a colour'}</span>
             {highlightedColorStudyHex ? (

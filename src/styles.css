@@ -1591,6 +1591,10 @@ button:disabled,
   transform: translateX(-50%);
 }
 
+.color-isolate-hint[data-active="false"] {
+  padding-right: 11px;
+}
+
 .sample-session-swatch {
   width: 18px;
   height: 18px;
