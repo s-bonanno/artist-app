@@ -106,6 +106,7 @@ const maxViewZoom = 10;
 const minImageZoom = 0.2;
 const maxImageZoom = 8;
 const maxColorStudyLongSide = 820;
+const colorIsolateTapMovementThreshold = 10;
 const colorStudyDetails: ShapeDetail[] = ['coarse', 'balanced', 'fine'];
 const colorStudyHighlightCache = new WeakMap<HTMLCanvasElement, Map<string, HTMLCanvasElement>>();
 
@@ -139,6 +140,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const lastViewPointerRef = useRef<{ x: number; y: number } | null>(null);
     const touchPointersRef = useRef<Map<number, PointerPosition>>(new Map());
     const touchGestureRef = useRef<TouchGestureState | null>(null);
+    const didUseMultiTouchRef = useRef(false);
     const viewTransformRef = useRef<ViewTransform>(defaultViewTransform);
     const viewportRef = useRef<WorkspaceState['viewport']>(state.viewport);
     const activeSamplePointerRef = useRef<number | null>(null);
@@ -214,6 +216,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       lastViewPointerRef.current = null;
       touchPointersRef.current.clear();
       touchGestureRef.current = null;
+      didUseMultiTouchRef.current = false;
     }, [image?.id, state.canvas.widthCm, state.canvas.heightCm]);
 
     useEffect(() => {
@@ -797,21 +800,20 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
       if (!image) return;
 
-      if (interactionMode === 'color-isolate' && event.pointerType === 'touch') {
-        event.preventDefault();
-        event.stopPropagation();
-        pickColorStudyAtPointer(event);
-        return;
-      }
-
       if (event.pointerType === 'touch' && interactionMode !== 'sample') {
         event.preventDefault();
         event.stopPropagation();
+        if (!touchPointersRef.current.size) {
+          didUseMultiTouchRef.current = false;
+        }
         event.currentTarget.setPointerCapture(event.pointerId);
         touchPointersRef.current.set(event.pointerId, {
           x: event.clientX,
           y: event.clientY,
         });
+        if (touchPointersRef.current.size > 1) {
+          didUseMultiTouchRef.current = true;
+        }
         startTouchGesture(event.currentTarget);
         return;
       }
@@ -922,11 +924,28 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         event.preventDefault();
         event.stopPropagation();
 
+        const touchGesture = touchGestureRef.current;
+        const shouldPickColorStudy =
+          interactionMode === 'color-isolate'
+          && !didUseMultiTouchRef.current
+          && touchGesture?.pointerIds.length === 1
+          && touchGesture.pointerIds[0] === event.pointerId
+          && Math.hypot(
+            event.clientX - touchGesture.startClientCenter.x,
+            event.clientY - touchGesture.startClientCenter.y,
+          ) <= colorIsolateTapMovementThreshold;
+
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
 
         touchPointersRef.current.delete(event.pointerId);
+        if (shouldPickColorStudy) {
+          pickColorStudyAtPointer(event);
+        }
+        if (!touchPointersRef.current.size) {
+          didUseMultiTouchRef.current = false;
+        }
         startTouchGesture(event.currentTarget);
         return;
       }
@@ -966,6 +985,9 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         }
 
         touchPointersRef.current.delete(event.pointerId);
+        if (!touchPointersRef.current.size) {
+          didUseMultiTouchRef.current = false;
+        }
         startTouchGesture(event.currentTarget);
         return;
       }
