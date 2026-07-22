@@ -30,7 +30,7 @@ import {
   Sun,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { initialWorkspaceState, type WorkspaceState } from '../app/appState';
 import { exportCanvas } from '../export/exportCanvas';
 import { exportPalette } from '../export/exportPalette';
@@ -114,9 +114,16 @@ export function Workspace({
   const [isLeavePromptOpen, setIsLeavePromptOpen] = useState(false);
   const [isResetPromptOpen, setIsResetPromptOpen] = useState(false);
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
-  const [colorStudy, setColorStudy] = useState<{ processing: boolean; swatches: SpatialColorSwatch[] }>({
+  const [colorStudy, setColorStudy] = useState<{
+    processing: boolean;
+    swatches: SpatialColorSwatch[];
+    progress: number;
+    stage: string | null;
+  }>({
     processing: false,
     swatches: [],
+    progress: 0,
+    stage: null,
   });
   const [highlightedColorStudyHex, setHighlightedColorStudyHex] = useState<string | null>(null);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -195,6 +202,23 @@ export function Workspace({
     if (colorStudy.processing) setHighlightedColorStudyHex(null);
   }, [colorStudy.processing]);
 
+  useEffect(() => {
+    if (!activeSlider) return undefined;
+
+    const finishSliderInteraction = () => setActiveSlider(null);
+    window.addEventListener('pointerup', finishSliderInteraction, { passive: true });
+    window.addEventListener('pointercancel', finishSliderInteraction, { passive: true });
+    window.addEventListener('touchend', finishSliderInteraction, { passive: true });
+    window.addEventListener('touchcancel', finishSliderInteraction, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointerup', finishSliderInteraction);
+      window.removeEventListener('pointercancel', finishSliderInteraction);
+      window.removeEventListener('touchend', finishSliderInteraction);
+      window.removeEventListener('touchcancel', finishSliderInteraction);
+    };
+  }, [activeSlider]);
+
   function closeTool() {
     setActiveSlider(null);
     setIsPaletteSampling(false);
@@ -216,38 +240,22 @@ export function Workspace({
     setActiveTool((currentTool) => (currentTool === tool ? null : tool));
   }
 
-  function startSliderInteraction(sliderId: string, pointerId?: number, target?: HTMLInputElement) {
-    if (pointerId !== undefined && target?.setPointerCapture) {
-      try {
-        target.setPointerCapture(pointerId);
-      } catch {
-        // Some browsers do not allow capture on native range controls.
-      }
-    }
-
+  function startSliderInteraction(sliderId: string) {
     setActiveSlider(sliderId);
   }
 
-  function endSliderInteraction(pointerId?: number, target?: HTMLInputElement) {
-    if (pointerId !== undefined && target?.hasPointerCapture?.(pointerId)) {
-      try {
-        target.releasePointerCapture(pointerId);
-      } catch {
-        // Capture may already be released by the browser.
-      }
-    }
-
+  function endSliderInteraction() {
     setActiveSlider(null);
   }
 
   function getSliderProps(sliderId: string) {
     return {
-      onPointerDown: (event: PointerEvent<HTMLInputElement>) =>
-        startSliderInteraction(sliderId, event.pointerId, event.currentTarget),
-      onPointerUp: (event: PointerEvent<HTMLInputElement>) =>
-        endSliderInteraction(event.pointerId, event.currentTarget),
-      onPointerCancel: (event: PointerEvent<HTMLInputElement>) =>
-        endSliderInteraction(event.pointerId, event.currentTarget),
+      onPointerDown: () => startSliderInteraction(sliderId),
+      onPointerUp: endSliderInteraction,
+      onPointerCancel: endSliderInteraction,
+      onTouchStart: () => startSliderInteraction(sliderId),
+      onTouchEnd: endSliderInteraction,
+      onTouchCancel: endSliderInteraction,
       onBlur: () => endSliderInteraction(),
       onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
         if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
@@ -1103,8 +1111,7 @@ export function Workspace({
                     <span>Colours</span>
                     {colorStudy.processing ? (
                       <span className="color-study-processing" role="status">
-                        <span aria-hidden="true" />
-                        Analysing
+                        {colorStudy.stage ?? 'Analysing'}
                       </span>
                     ) : null}
                   </div>
@@ -1384,6 +1391,19 @@ export function Workspace({
         </div>
       </header>
 
+      {colorStudy.processing ? (
+        <div
+          className="workspace-processing-progress"
+          role="progressbar"
+          aria-label={colorStudy.stage ?? 'Analysing colour study'}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(colorStudy.progress * 100)}
+        >
+          <span style={{ transform: `scaleX(${Math.max(0.04, colorStudy.progress)})` }} />
+        </div>
+      ) : null}
+
       {workspaceNotice ? (
         <div className="workspace-toast" role="status">
           {workspaceNotice}
@@ -1430,10 +1450,16 @@ export function Workspace({
         {isColorStudyMode && !isPaletteSampling && !isMoveZoomMode ? (
           <div className="sampling-hint color-isolate-hint" data-active={Boolean(highlightedColorStudyHex)}>
             <PaletteIcon size={15} />
-            <span>{highlightedColorStudyHex ? 'Colour isolate' : 'Click image to isolate a colour'}</span>
+            {highlightedColorStudyHex ? (
+              <span>Colour isolate</span>
+            ) : (
+              <>
+                <span className="color-isolate-mouse-instruction">Double-click image to isolate a colour</span>
+                <span className="color-isolate-touch-instruction">Double-tap image to isolate a colour</span>
+              </>
+            )}
             {highlightedColorStudyHex ? (
               <>
-                <span className="sample-session-swatch" style={{ backgroundColor: highlightedColorStudyHex }} />
                 <button
                   type="button"
                   className="sample-session-close"
@@ -1442,6 +1468,12 @@ export function Workspace({
                 >
                   <X size={14} />
                 </button>
+                <span
+                  className="color-isolate-mix-swatch"
+                  role="img"
+                  aria-label={`Isolated colour ${highlightedColorStudyHex}`}
+                  style={{ backgroundColor: highlightedColorStudyHex }}
+                />
               </>
             ) : null}
           </div>
@@ -1459,6 +1491,7 @@ export function Workspace({
                   : 'locked'
           }
           state={state}
+          isSliderInteracting={Boolean(activeSlider)}
           highlightedColorStudyHex={highlightedColorStudyHex}
           onSampleColor={addSwatch}
           onColorStudyPick={setHighlightedColorStudyHex}

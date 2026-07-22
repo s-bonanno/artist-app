@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  MouseEvent,
   PointerEvent,
   useEffect,
   useImperativeHandle,
@@ -12,22 +13,34 @@ import { drawGridGuides } from '../grid/drawGrid';
 import type { ReferenceImage } from '../library/referenceTypes';
 import { rgbToHex } from '../palette/colorUtils';
 import type { ColorSample, RgbColor } from '../palette/paletteTypes';
-import type { ShapeDetail, SpatialColorSwatch } from '../palette/spatialColorStudy';
+import type {
+  ShapeDetail,
+  SpatialColorStudyProgress,
+  SpatialColorSwatch,
+} from '../palette/spatialColorStudy';
 import { applyValuesToImageData, shouldApplyValues } from '../values/valueTransforms';
 import { BASE_CANVAS_RENDER_LONG_SIDE, getCanvasPixelSize } from './canvasSizing';
 
 type CanvasStageProps = {
   image: ReferenceImage | null;
   interactionMode: 'locked' | 'pan' | 'sample' | 'color-isolate';
+  isSliderInteracting: boolean;
   state: WorkspaceState;
   highlightedColorStudyHex: string | null;
   onSampleColor: (sample: ColorSample) => void;
   onColorStudyPick: (hex: string) => void;
-  onColorStudyChange: (update: { processing: boolean; swatches: SpatialColorSwatch[] }) => void;
+  onColorStudyChange: (update: ColorStudyStatus) => void;
   onViewportChange: (viewport: WorkspaceState['viewport']) => void;
 };
 
-type ColorStudyWorkerResponse = {
+type ColorStudyWorkerProgressResponse = SpatialColorStudyProgress & {
+  type: 'progress';
+  id: number;
+  detail: ShapeDetail;
+};
+
+type ColorStudyWorkerResultResponse = {
+  type: 'result';
   id: number;
   detail: ShapeDetail;
   width: number;
@@ -36,9 +49,19 @@ type ColorStudyWorkerResponse = {
   swatches: SpatialColorSwatch[];
 };
 
+type ColorStudyWorkerResponse = ColorStudyWorkerProgressResponse | ColorStudyWorkerResultResponse;
+
+type ColorStudyStatus = {
+  processing: boolean;
+  swatches: SpatialColorSwatch[];
+  progress: number;
+  stage: string | null;
+};
+
 type ColorStudyRender = {
   canvas: HTMLCanvasElement;
   swatches: SpatialColorSwatch[];
+  drawRect: ImageDrawRect;
 };
 
 type ImageDrawRect = {
@@ -46,6 +69,16 @@ type ImageDrawRect = {
   y: number;
   width: number;
   height: number;
+};
+
+type ColorStudyCrop = {
+  sourceX: number;
+  sourceY: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  width: number;
+  height: number;
+  drawRect: ImageDrawRect;
 };
 
 type ViewTransform = {
@@ -99,14 +132,23 @@ const maxWorkspaceBackingPixels = 16_000_000;
 const maxWorkspaceRenderLongSide = 4800;
 const maxIOSWorkspaceBackingPixels = 16_000_000;
 const maxIOSWorkspaceRenderLongSide = 4800;
+const iosSliderRenderQuality = 0.5;
 const workspaceRenderQualityStep = 0.25;
 const paletteSampleSize = 3;
 const minViewZoom = 1;
 const maxViewZoom = 10;
 const minImageZoom = 0.2;
 const maxImageZoom = 8;
-const maxColorStudyLongSide = 820;
+const colorStudyReferenceLongSide = 820;
+const colorStudyLongSideByDetail: Record<ShapeDetail, number> = {
+  coarse: 1200,
+  balanced: 1500,
+  fine: 1800,
+};
+const colorStudyViewportDebounceMs = 320;
 const colorIsolateTapMovementThreshold = 10;
+const colorIsolateDoubleTapDistanceThreshold = 28;
+const colorIsolateDoubleTapInterval = 350;
 const colorStudyDetails: ShapeDetail[] = ['coarse', 'balanced', 'fine'];
 const colorStudyHighlightCache = new WeakMap<HTMLCanvasElement, Map<string, HTMLCanvasElement>>();
 
@@ -115,6 +157,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     {
       image,
       interactionMode,
+      isSliderInteracting,
       state,
       highlightedColorStudyHex,
       onSampleColor,
@@ -128,7 +171,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const sampleLoupeRef = useRef<HTMLCanvasElement | null>(null);
     const loadedImageRef = useRef<HTMLImageElement | null>(null);
-    const colorStudyCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const colorStudyRenderRef = useRef<ColorStudyRender | null>(null);
     const colorStudyCacheRef = useRef<Map<ShapeDetail, ColorStudyRender>>(new Map());
     const colorStudyDetailRef = useRef<ShapeDetail>('balanced');
     const colorStudySignatureRef = useRef('');
@@ -141,6 +184,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const touchPointersRef = useRef<Map<number, PointerPosition>>(new Map());
     const touchGestureRef = useRef<TouchGestureState | null>(null);
     const didUseMultiTouchRef = useRef(false);
+    const lastColorIsolateTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
+    const ignoreColorIsolateDoubleClickUntilRef = useRef(0);
     const viewTransformRef = useRef<ViewTransform>(defaultViewTransform);
     const viewportRef = useRef<WorkspaceState['viewport']>(state.viewport);
     const activeSamplePointerRef = useRef<number | null>(null);
@@ -222,7 +267,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     useEffect(() => {
       if (!image) {
         loadedImageRef.current = null;
-        colorStudyCanvasRef.current = null;
+        colorStudyRenderRef.current = null;
         colorStudyCacheRef.current.clear();
         setLoadedImageRevision((revision) => revision + 1);
         draw();
@@ -230,7 +275,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       }
 
       loadedImageRef.current = null;
-      colorStudyCanvasRef.current = null;
+      colorStudyRenderRef.current = null;
       colorStudyCacheRef.current.clear();
       setLoadedImageRevision((revision) => revision + 1);
       draw();
@@ -253,18 +298,29 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       const cached = colorStudyCacheRef.current.get(detail);
       if (cached) {
-        colorStudyCanvasRef.current = cached.canvas;
-        onColorStudyChange({ processing: false, swatches: cached.swatches });
+        colorStudyRenderRef.current = cached;
+        onColorStudyChange({
+          processing: false,
+          swatches: cached.swatches,
+          progress: 1,
+          stage: null,
+        });
         draw();
         return;
       }
 
-      onColorStudyChange({ processing: true, swatches: [] });
+      onColorStudyChange({
+        processing: true,
+        swatches: colorStudyRenderRef.current?.swatches ?? [],
+        progress: 0,
+        stage: 'Preparing crop',
+      });
       draw();
     }, [state.values.enabled, state.values.mode, state.values.colorDetail]);
 
     useEffect(() => {
       const loadedImage = loadedImageRef.current;
+      const isMovingImage = interactionMode === 'pan';
       const shouldProcess = Boolean(
         loadedImage
         && state.values.enabled
@@ -272,9 +328,19 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       );
       const requestId = colorStudyRequestRef.current + 1;
       colorStudyRequestRef.current = requestId;
+
+      if (isMovingImage) {
+        return undefined;
+      }
+
       const imageKey = `${image?.id ?? ''}:${loadedImageRevision}`;
       const sourceSignature = [
         imageKey,
+        state.canvas.widthCm,
+        state.canvas.heightCm,
+        state.viewport.zoom.toFixed(4),
+        state.viewport.panX.toFixed(2),
+        state.viewport.panY.toFixed(2),
         state.filters.enabled,
         state.filters.blur,
         state.filters.exposure,
@@ -283,107 +349,181 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         state.filters.shadows,
         state.filters.saturation,
       ].join(':');
-      const previousRender = colorStudyCacheRef.current.get(colorStudyDetailRef.current);
+      const previousRender = colorStudyRenderRef.current;
 
       if (sourceSignature !== colorStudySignatureRef.current) {
         colorStudyCacheRef.current.clear();
         colorStudySignatureRef.current = sourceSignature;
+        colorStudyRenderRef.current = null;
       }
       if (imageKey !== colorStudyImageKeyRef.current) {
-        colorStudyCanvasRef.current = null;
+        colorStudyRenderRef.current = null;
         colorStudyImageKeyRef.current = imageKey;
       }
 
       if (!loadedImage || !shouldProcess) {
-        colorStudyCanvasRef.current = null;
-        onColorStudyChange({ processing: false, swatches: [] });
+        colorStudyRenderRef.current = null;
+        onColorStudyChange({ processing: false, swatches: [], progress: 0, stage: null });
         draw();
         return undefined;
       }
 
       const selectedDetail = colorStudyDetailRef.current;
       const cached = colorStudyCacheRef.current.get(selectedDetail);
-      if (cached && colorStudyCacheRef.current.size === colorStudyDetails.length) {
-        colorStudyCanvasRef.current = cached.canvas;
-        onColorStudyChange({ processing: false, swatches: cached.swatches });
+      if (cached) {
+        colorStudyRenderRef.current = cached;
+        onColorStudyChange({
+          processing: false,
+          swatches: cached.swatches,
+          progress: 1,
+          stage: null,
+        });
         draw();
         return undefined;
       }
 
-      const scale = Math.min(1, maxColorStudyLongSide / Math.max(loadedImage.naturalWidth, loadedImage.naturalHeight));
-      const width = Math.max(1, Math.round(loadedImage.naturalWidth * scale));
-      const height = Math.max(1, Math.round(loadedImage.naturalHeight * scale));
-      const analysisCanvas = document.createElement('canvas');
-      const analysisContext = analysisCanvas.getContext('2d', { willReadFrequently: true });
-      analysisCanvas.width = width;
-      analysisCanvas.height = height;
-
-      if (!analysisContext) {
-        onColorStudyChange({ processing: false, swatches: [] });
-        return undefined;
-      }
-
-      analysisContext.drawImage(loadedImage, 0, 0, width, height);
-      const imageData = analysisContext.getImageData(0, 0, width, height);
-      applyBaseFilterAdjustments(imageData, state.filters, maxColorStudyLongSide / BASE_CANVAS_RENDER_LONG_SIDE);
-      applyTonalFilterAdjustments(imageData, state.filters);
-
-      const worker = new Worker(
-        new URL('../palette/spatialColorStudy.worker.ts', import.meta.url),
-        { type: 'module' },
-      );
-      const details = [
-        selectedDetail,
-        ...colorStudyDetails.filter((detail) => detail !== selectedDetail),
-      ].filter((detail) => !colorStudyCacheRef.current.has(detail));
-      onColorStudyChange({ processing: true, swatches: previousRender?.swatches ?? [] });
+      onColorStudyChange({
+        processing: true,
+        swatches: previousRender?.swatches ?? [],
+        progress: 0.03,
+        stage: 'Preparing crop',
+      });
       draw();
 
-      worker.onmessage = (event: MessageEvent<ColorStudyWorkerResponse>) => {
-        if (event.data.id !== colorStudyRequestRef.current) return;
-        const resultCanvas = document.createElement('canvas');
-        const resultContext = resultCanvas.getContext('2d');
-        resultCanvas.width = event.data.width;
-        resultCanvas.height = event.data.height;
-        if (!resultContext) return;
+      let worker: Worker | null = null;
+      const processTimeout = window.setTimeout(() => {
+        const canvasSize = getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm);
+        const crop = getColorStudyCrop(
+          canvasSize.width,
+          canvasSize.height,
+          loadedImage,
+          state.viewport,
+          colorStudyLongSideByDetail[selectedDetail],
+        );
+        if (!crop) {
+          onColorStudyChange({ processing: false, swatches: [], progress: 0, stage: null });
+          return;
+        }
 
-        resultContext.putImageData(new ImageData(
-          new Uint8ClampedArray(event.data.buffer),
-          event.data.width,
-          event.data.height,
-        ), 0, 0);
-        colorStudyCacheRef.current.set(event.data.detail, {
-          canvas: resultCanvas,
-          swatches: event.data.swatches,
+        const analysisCanvas = document.createElement('canvas');
+        const analysisContext = analysisCanvas.getContext('2d', { willReadFrequently: true });
+        analysisCanvas.width = crop.width;
+        analysisCanvas.height = crop.height;
+
+        if (!analysisContext) {
+          onColorStudyChange({ processing: false, swatches: [], progress: 0, stage: null });
+          return;
+        }
+
+        analysisContext.imageSmoothingEnabled = true;
+        analysisContext.imageSmoothingQuality = 'high';
+        analysisContext.drawImage(
+          loadedImage,
+          crop.sourceX,
+          crop.sourceY,
+          crop.sourceWidth,
+          crop.sourceHeight,
+          0,
+          0,
+          crop.width,
+          crop.height,
+        );
+        const imageData = analysisContext.getImageData(0, 0, crop.width, crop.height);
+        applyBaseFilterAdjustments(
+          imageData,
+          state.filters,
+          Math.max(crop.width, crop.height) / BASE_CANVAS_RENDER_LONG_SIDE,
+        );
+        applyTonalFilterAdjustments(imageData, state.filters);
+        onColorStudyChange({
+          processing: true,
+          swatches: previousRender?.swatches ?? [],
+          progress: 0.06,
+          stage: 'Grouping colours',
         });
 
-        if (event.data.detail !== colorStudyDetailRef.current) return;
-        colorStudyCanvasRef.current = resultCanvas;
-        onColorStudyChange({ processing: false, swatches: event.data.swatches });
-        draw();
+        worker = new Worker(
+          new URL('../palette/spatialColorStudy.worker.ts', import.meta.url),
+          { type: 'module' },
+        );
+
+        worker.onmessage = (event: MessageEvent<ColorStudyWorkerResponse>) => {
+          if (event.data.id !== colorStudyRequestRef.current) return;
+          if (event.data.type === 'progress') {
+            if (event.data.detail !== colorStudyDetailRef.current) return;
+            onColorStudyChange({
+              processing: true,
+              swatches: previousRender?.swatches ?? [],
+              progress: event.data.progress,
+              stage: event.data.stage,
+            });
+            return;
+          }
+
+          const resultCanvas = document.createElement('canvas');
+          const resultContext = resultCanvas.getContext('2d');
+          resultCanvas.width = event.data.width;
+          resultCanvas.height = event.data.height;
+          if (!resultContext) return;
+
+          resultContext.putImageData(new ImageData(
+            new Uint8ClampedArray(event.data.buffer),
+            event.data.width,
+            event.data.height,
+          ), 0, 0);
+          const result: ColorStudyRender = {
+            canvas: resultCanvas,
+            swatches: event.data.swatches,
+            drawRect: crop.drawRect,
+          };
+          colorStudyCacheRef.current.set(event.data.detail, result);
+
+          if (event.data.detail !== colorStudyDetailRef.current) return;
+          colorStudyRenderRef.current = result;
+          onColorStudyChange({
+            processing: false,
+            swatches: event.data.swatches,
+            progress: 1,
+            stage: null,
+          });
+          draw();
+        };
+
+        worker.onerror = () => {
+          if (requestId !== colorStudyRequestRef.current) return;
+          onColorStudyChange({
+            processing: false,
+            swatches: previousRender?.swatches ?? [],
+            progress: 0,
+            stage: null,
+          });
+          draw();
+        };
+
+        worker.postMessage({
+          id: requestId,
+          width: crop.width,
+          height: crop.height,
+          buffer: imageData.data.buffer,
+          details: [selectedDetail],
+        }, [imageData.data.buffer]);
+      }, colorStudyViewportDebounceMs);
+
+      return () => {
+        window.clearTimeout(processTimeout);
+        worker?.terminate();
       };
-
-      worker.onerror = () => {
-        if (requestId !== colorStudyRequestRef.current) return;
-        colorStudyCanvasRef.current = null;
-        onColorStudyChange({ processing: false, swatches: [] });
-        draw();
-      };
-
-      worker.postMessage({
-        id: requestId,
-        width,
-        height,
-        buffer: imageData.data.buffer,
-        details,
-      }, [imageData.data.buffer]);
-
-      return () => worker.terminate();
     }, [
       loadedImageRevision,
       image?.id,
       state.values.enabled,
       state.values.mode,
+      state.values.colorDetail,
+      state.canvas.widthCm,
+      state.canvas.heightCm,
+      state.viewport.zoom,
+      state.viewport.panX,
+      state.viewport.panY,
       state.filters.enabled,
       state.filters.blur,
       state.filters.exposure,
@@ -391,7 +531,20 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       state.filters.highlights,
       state.filters.shadows,
       state.filters.saturation,
+      interactionMode,
     ]);
+
+    useEffect(() => {
+      if (interactionMode !== 'pan') return;
+
+      onColorStudyChange({
+        processing: false,
+        swatches: colorStudyRenderRef.current?.swatches ?? [],
+        progress: 0,
+        stage: null,
+      });
+      draw();
+    }, [interactionMode]);
 
     useEffect(() => {
       draw();
@@ -399,12 +552,17 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
     useEffect(() => {
       const { width, height } = logicalCanvasSizeRef.current;
-      const nextRenderQuality = getWorkspaceRenderQuality(width, height, viewTransform.zoom);
+      const nextRenderQuality = getWorkspaceRenderQuality(
+        width,
+        height,
+        viewTransform.zoom,
+        isSliderInteracting,
+      );
 
       if (Math.abs(nextRenderQuality - renderQualityRef.current) > 0.001) {
         draw();
       }
-    }, [viewTransform.zoom]);
+    }, [viewTransform.zoom, isSliderInteracting]);
 
     useEffect(() => {
       const stage = stageRef.current;
@@ -444,7 +602,12 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       if (!ctx) return;
 
       const { width, height, pixelsPerCm } = getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm);
-      const renderQuality = getWorkspaceRenderQuality(width, height, viewTransformRef.current.zoom);
+      const renderQuality = getWorkspaceRenderQuality(
+        width,
+        height,
+        viewTransformRef.current.zoom,
+        isSliderInteracting,
+      );
       const backingWidth = Math.round(width * renderQuality);
       const backingHeight = Math.round(height * renderQuality);
       const renderScale = Math.max(width, height) / BASE_CANVAS_RENDER_LONG_SIDE;
@@ -471,7 +634,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
           state,
           renderScale,
           renderQuality,
-          colorStudyCanvasRef.current,
+          interactionMode === 'pan' ? null : colorStudyRenderRef.current,
           highlightedColorStudyHex,
         );
       }
@@ -546,7 +709,14 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       const imageX = ((point.x - imageRect.x) / imageRect.width) * loadedImage.naturalWidth;
       const imageY = ((point.y - imageRect.y) / imageRect.height) * loadedImage.naturalHeight;
-      const rgb = sampleImageColor(loadedImage, imageX, imageY, state, colorStudyCanvasRef.current);
+      const rgb = sampleImageColor(
+        loadedImage,
+        imageX,
+        imageY,
+        point,
+        state,
+        colorStudyRenderRef.current,
+      );
       const loupeSize = 116;
       const isTouchSample = isTouchSamplingPointer(event);
       const left = isTouchSample
@@ -580,17 +750,15 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       };
     }
 
-    function pickColorStudyAtPointer(event: PointerEvent<HTMLCanvasElement>) {
-      const loadedImage = loadedImageRef.current;
-      const colorStudyCanvas = colorStudyCanvasRef.current;
+    function pickColorStudyAtClient(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+      const colorStudyRender = colorStudyRenderRef.current;
+      const colorStudyCanvas = colorStudyRender?.canvas;
       const colorStudyContext = colorStudyCanvas?.getContext('2d', { willReadFrequently: true });
-      if (!loadedImage || !colorStudyCanvas || !colorStudyContext) return;
+      if (!colorStudyRender || !colorStudyCanvas || !colorStudyContext) return;
 
-      const point = getCanvasPoint(event);
-      const logicalSize = logicalCanvasSizeRef.current;
-      const imageRect = getImageDrawRect(logicalSize.width, logicalSize.height, loadedImage, state.viewport);
-      const normalizedX = (point.x - imageRect.x) / imageRect.width;
-      const normalizedY = (point.y - imageRect.y) / imageRect.height;
+      const point = getCanvasPointFromClient(canvas, clientX, clientY);
+      const normalizedX = (point.x - colorStudyRender.drawRect.x) / colorStudyRender.drawRect.width;
+      const normalizedY = (point.y - colorStudyRender.drawRect.y) / colorStudyRender.drawRect.height;
       if (normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1) return;
 
       const colorX = clamp(Math.floor(normalizedX * colorStudyCanvas.width), 0, colorStudyCanvas.width - 1);
@@ -598,6 +766,16 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const pixel = colorStudyContext.getImageData(colorX, colorY, 1, 1).data;
 
       onColorStudyPick(rgbToHex([pixel[0], pixel[1], pixel[2]]));
+    }
+
+    function handleDoubleClick(event: MouseEvent<HTMLCanvasElement>) {
+      if (interactionMode !== 'color-isolate' || performance.now() < ignoreColorIsolateDoubleClickUntilRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      pickColorStudyAtClient(event.currentTarget, event.clientX, event.clientY);
     }
 
     function updateSamplePreview(event: PointerEvent<HTMLCanvasElement>, clearWhenOutside = true) {
@@ -813,6 +991,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         });
         if (touchPointersRef.current.size > 1) {
           didUseMultiTouchRef.current = true;
+          lastColorIsolateTapRef.current = null;
         }
         startTouchGesture(event.currentTarget);
         return;
@@ -833,7 +1012,6 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       if (interactionMode === 'color-isolate') {
         event.preventDefault();
         event.stopPropagation();
-        pickColorStudyAtPointer(event);
         return;
       }
 
@@ -941,7 +1119,27 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
         touchPointersRef.current.delete(event.pointerId);
         if (shouldPickColorStudy) {
-          pickColorStudyAtPointer(event);
+          const now = performance.now();
+          const previousTap = lastColorIsolateTapRef.current;
+          const isDoubleTap =
+            previousTap !== null
+            && now - previousTap.time <= colorIsolateDoubleTapInterval
+            && Math.hypot(event.clientX - previousTap.x, event.clientY - previousTap.y)
+              <= colorIsolateDoubleTapDistanceThreshold;
+
+          if (isDoubleTap) {
+            pickColorStudyAtClient(event.currentTarget, event.clientX, event.clientY);
+            lastColorIsolateTapRef.current = null;
+            ignoreColorIsolateDoubleClickUntilRef.current = now + colorIsolateDoubleTapInterval;
+          } else {
+            lastColorIsolateTapRef.current = {
+              time: now,
+              x: event.clientX,
+              y: event.clientY,
+            };
+          }
+        } else {
+          lastColorIsolateTapRef.current = null;
         }
         if (!touchPointersRef.current.size) {
           didUseMultiTouchRef.current = false;
@@ -988,6 +1186,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         if (!touchPointersRef.current.size) {
           didUseMultiTouchRef.current = false;
         }
+        lastColorIsolateTapRef.current = null;
         startTouchGesture(event.currentTarget);
         return;
       }
@@ -1112,6 +1311,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
               onPointerUp={endPan}
               onPointerCancel={cancelPointer}
               onPointerLeave={handlePointerLeave}
+              onDoubleClick={handleDoubleClick}
               onWheel={handleWheel}
               style={
                 canvasDisplaySize
@@ -1167,6 +1367,50 @@ function getImageDrawRect(
   };
 }
 
+function getColorStudyCrop(
+  canvasWidth: number,
+  canvasHeight: number,
+  image: HTMLImageElement,
+  viewport: WorkspaceState['viewport'],
+  maximumLongSide: number,
+): ColorStudyCrop | null {
+  const imageRect = getImageDrawRect(canvasWidth, canvasHeight, image, viewport);
+  const left = Math.max(0, imageRect.x);
+  const top = Math.max(0, imageRect.y);
+  const right = Math.min(canvasWidth, imageRect.x + imageRect.width);
+  const bottom = Math.min(canvasHeight, imageRect.y + imageRect.height);
+  const drawWidth = right - left;
+  const drawHeight = bottom - top;
+  if (drawWidth <= 1 || drawHeight <= 1) return null;
+
+  const naturalWidth = image.naturalWidth || image.width;
+  const naturalHeight = image.naturalHeight || image.height;
+  const sourceX = clamp(((left - imageRect.x) / imageRect.width) * naturalWidth, 0, naturalWidth);
+  const sourceY = clamp(((top - imageRect.y) / imageRect.height) * naturalHeight, 0, naturalHeight);
+  const sourceRight = clamp(((right - imageRect.x) / imageRect.width) * naturalWidth, 0, naturalWidth);
+  const sourceBottom = clamp(((bottom - imageRect.y) / imageRect.height) * naturalHeight, 0, naturalHeight);
+  const sourceWidth = sourceRight - sourceX;
+  const sourceHeight = sourceBottom - sourceY;
+  if (sourceWidth <= 1 || sourceHeight <= 1) return null;
+
+  const scale = Math.min(1, maximumLongSide / Math.max(sourceWidth, sourceHeight));
+
+  return {
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    width: Math.max(1, Math.round(sourceWidth * scale)),
+    height: Math.max(1, Math.round(sourceHeight * scale)),
+    drawRect: {
+      x: left,
+      y: top,
+      width: drawWidth,
+      height: drawHeight,
+    },
+  };
+}
+
 function getCanvasDisplaySize(
   stage: HTMLDivElement,
   logicalSize: { width: number; height: number },
@@ -1206,7 +1450,16 @@ function getStageContentCenter(stage: HTMLDivElement | null) {
   };
 }
 
-function getWorkspaceRenderQuality(width: number, height: number, viewZoom: number) {
+function getWorkspaceRenderQuality(
+  width: number,
+  height: number,
+  viewZoom: number,
+  isSliderInteracting = false,
+) {
+  if (isSliderInteracting && isIOSWebKit()) {
+    return iosSliderRenderQuality;
+  }
+
   const limits = getWorkspaceBackingLimits();
   const longSide = Math.max(width, height);
   const pixelCount = width * height;
@@ -1250,7 +1503,7 @@ function drawReferenceImage(
   state: WorkspaceState,
   renderScale: number,
   renderQuality: number,
-  colorStudyImage: HTMLCanvasElement | null,
+  colorStudyRender: ColorStudyRender | null,
   highlightedColorStudyHex: string | null,
 ) {
   const scaledImageRect = scaleImageDrawRect(imageRect, renderQuality);
@@ -1269,7 +1522,7 @@ function drawReferenceImage(
   const shouldApplyTonalFilters = hasTonalFilterAdjustments(state.filters);
   const shouldApplyValueMap = shouldApplyValues(state.values) && state.values.mode !== 'color';
   const shouldApplyColorStudy = Boolean(
-    colorStudyImage
+    colorStudyRender
     && shouldApplyValues(state.values)
     && state.values.mode === 'color',
   );
@@ -1292,20 +1545,22 @@ function drawReferenceImage(
     ctx.putImageData(imageData, visibleRect.x, visibleRect.y);
   }
 
-  if (shouldApplyColorStudy && colorStudyImage) {
+  if (shouldApplyColorStudy && colorStudyRender) {
+    const colorStudyImage = colorStudyRender.canvas;
     const displayedColorStudy = highlightedColorStudyHex
       ? getColorStudyIsolationImage(colorStudyImage, highlightedColorStudyHex) ?? colorStudyImage
       : colorStudyImage;
+    const scaledColorStudyRect = scaleImageDrawRect(colorStudyRender.drawRect, renderQuality);
     ctx.save();
     ctx.globalAlpha = clamp(state.values.opacity, 0, 1);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(
       displayedColorStudy,
-      scaledImageRect.x,
-      scaledImageRect.y,
-      scaledImageRect.width,
-      scaledImageRect.height,
+      scaledColorStudyRect.x,
+      scaledColorStudyRect.y,
+      scaledColorStudyRect.width,
+      scaledColorStudyRect.height,
     );
     ctx.restore();
   }
@@ -1475,8 +1730,9 @@ function sampleImageColor(
   image: HTMLImageElement,
   imageX: number,
   imageY: number,
+  canvasPoint: PointerPosition,
   state: WorkspaceState,
-  colorStudyImage: HTMLCanvasElement | null,
+  colorStudyRender: ColorStudyRender | null,
 ): RgbColor {
   const sampleSize = paletteSampleSize;
   const halfSample = Math.floor(sampleSize / 2);
@@ -1489,11 +1745,16 @@ function sampleImageColor(
   if (!sampleContext) return [0, 0, 0];
 
   const useFilteredSource = getPaletteSampleSource(state) === 'filtered';
-  const useColorStudy = Boolean(useFilteredSource && state.values.mode === 'color' && colorStudyImage);
+  const useColorStudy = Boolean(useFilteredSource && state.values.mode === 'color' && colorStudyRender);
 
-  if (useColorStudy && colorStudyImage) {
-    const mappedX = (imageX / image.naturalWidth) * colorStudyImage.width;
-    const mappedY = (imageY / image.naturalHeight) * colorStudyImage.height;
+  if (useColorStudy && colorStudyRender) {
+    const colorStudyImage = colorStudyRender.canvas;
+    const mappedX = (
+      (canvasPoint.x - colorStudyRender.drawRect.x) / colorStudyRender.drawRect.width
+    ) * colorStudyImage.width;
+    const mappedY = (
+      (canvasPoint.y - colorStudyRender.drawRect.y) / colorStudyRender.drawRect.height
+    ) * colorStudyImage.height;
     const sourceX = clamp(Math.round(mappedX) - halfSample, 0, colorStudyImage.width - sampleSize);
     const sourceY = clamp(Math.round(mappedY) - halfSample, 0, colorStudyImage.height - sampleSize);
     sampleContext.drawImage(

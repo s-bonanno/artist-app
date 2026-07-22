@@ -20,9 +20,17 @@ workerScope.onmessage = (event) => {
   const source = new ImageData(new Uint8ClampedArray(buffer), width, height);
 
   for (const detail of details) {
-    const result = createSpatialColorStudy(source, detail);
+    const result = createSpatialColorStudy(source, detail, (update) => {
+      workerScope.postMessage({
+        type: 'progress',
+        id,
+        detail,
+        ...update,
+      }, []);
+    });
 
     workerScope.postMessage({
+      type: 'result',
       id,
       detail,
       width: result.mapped.width,

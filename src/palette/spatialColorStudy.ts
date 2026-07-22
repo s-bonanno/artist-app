@@ -14,6 +14,11 @@ export type SpatialColorSwatch = {
   share: number;
 };
 
+export type SpatialColorStudyProgress = {
+  progress: number;
+  stage: 'Grouping colours' | 'Refining shapes' | 'Painting study';
+};
+
 type LabImage = {
   lightness: Float32Array;
   greenRed: Float32Array;
@@ -105,14 +110,22 @@ const HUE_FAMILY_ANGLES = [255, 205, 150, 105, 70, 30, 345, 305];
 export function createSpatialColorStudy(
   imageData: ImageData,
   detail: ShapeDetail = 'balanced',
+  onProgress?: (update: SpatialColorStudyProgress) => void,
 ): SpatialColorStudyResult {
   const { width, height } = imageData;
   const settings = DETAIL_SETTINGS[detail];
+  const resolutionScale = Math.max(width, height) / 820;
+  onProgress?.({ progress: 0.08, stage: 'Grouping colours' });
   const source = imageDataToOklab(imageData);
+  onProgress?.({ progress: 0.18, stage: 'Grouping colours' });
   const softened = edgeAwareSmooth(source, width, height, settings.smoothingPasses);
-  const labels = buildLocalRegions(softened, width, height, settings);
+  onProgress?.({ progress: 0.34, stage: 'Grouping colours' });
+  const labels = buildLocalRegions(softened, width, height, settings, resolutionScale);
+  onProgress?.({ progress: 0.66, stage: 'Refining shapes' });
   const merged = mergeSimilarNeighbours(labels, softened, width, height, settings.mergeThreshold);
+  onProgress?.({ progress: 0.82, stage: 'Painting study' });
   const painted = paintRegions(merged.labels, softened, imageData, merged.regionCount, settings);
+  onProgress?.({ progress: 1, stage: 'Painting study' });
 
   return {
     mapped: painted.mapped,
@@ -208,8 +221,10 @@ function buildLocalRegions(
   width: number,
   height: number,
   settings: DetailSettings,
+  resolutionScale: number,
 ) {
-  const spacing = Math.max(8, Math.min(settings.spacing, Math.floor(Math.min(width, height) / 4)));
+  const scaledSpacing = settings.spacing * Math.max(0.5, resolutionScale);
+  const spacing = Math.max(8, Math.min(scaledSpacing, Math.floor(Math.min(width, height) / 4)));
   const centers: Center[] = [];
 
   for (let y = Math.floor(spacing / 2); y < height; y += spacing) {
