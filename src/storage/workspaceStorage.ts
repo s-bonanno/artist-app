@@ -309,6 +309,9 @@ function normalizeStoredState(state: Partial<Omit<WorkspaceState, 'image'>>): Om
     values: {
       ...initialWorkspaceState.values,
       ...state.values,
+      mode: state.values?.mode === 'grayscale'
+        ? 'map'
+        : state.values?.mode ?? initialWorkspaceState.values.mode,
     },
     palette: {
       ...initialWorkspaceState.palette,
@@ -337,6 +340,9 @@ function normalizeWorkspaceDefaults(settings: Partial<WorkspaceDefaults>): Works
     values: {
       ...initialWorkspaceState.values,
       ...settings.values,
+      mode: settings.values?.mode === 'grayscale'
+        ? 'map'
+        : settings.values?.mode ?? initialWorkspaceState.values.mode,
     },
   };
 }

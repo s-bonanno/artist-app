@@ -23,7 +23,12 @@ export function shouldApplyValues(values: ValueSettings) {
   return values.enabled && values.opacity > 0;
 }
 
-export function applyValuesToImageData(imageData: ImageData, values: ValueSettings) {
+export function applyValuesToImageData(
+  imageData: ImageData,
+  values: ValueSettings,
+  onValueTones?: (tones: number[]) => void,
+  isolatedTone?: number | null,
+) {
   if (!shouldApplyValues(values)) return imageData;
   if (values.mode === 'color') return imageData;
 
@@ -32,6 +37,9 @@ export function applyValuesToImageData(imageData: ImageData, values: ValueSettin
   const opacity = clamp(values.opacity, 0, 1);
   const sourceData = getSimplifiedData(data, imageData.width, imageData.height, values.simplify);
   const valueScale = values.mode === 'grayscale' ? [] : calculateStableNotanScale(sourceData, levels);
+  onValueTones?.(
+    Array.from(new Set(valueScale.map((range) => range.tone))).sort((first, second) => first - second),
+  );
 
   for (let index = 0; index < data.length; index += 4) {
     const alpha = data[index + 3];
@@ -44,12 +52,18 @@ export function applyValuesToImageData(imageData: ImageData, values: ValueSettin
     const sourceGreen = sourceData[index + 1];
     const sourceBlue = sourceData[index + 2];
     const luminance = getLuminance(sourceRed, sourceGreen, sourceBlue);
-    const target = getValueColor(
+    const mappedTarget = getValueColor(
       values.mode,
       luminance,
       valueScale,
       alpha,
     );
+    const target = values.mode === 'map'
+      && isolatedTone !== null
+      && isolatedTone !== undefined
+      && mappedTarget[0] !== isolatedTone
+      ? getIsolationWarmTint(mappedTarget[0], alpha)
+      : mappedTarget;
 
     data[index] = blendChannel(target[0], originalRed, opacity);
     data[index + 1] = blendChannel(target[1], originalGreen, opacity);
@@ -58,6 +72,14 @@ export function applyValuesToImageData(imageData: ImageData, values: ValueSettin
   }
 
   return imageData;
+}
+
+function getIsolationWarmTint(tone: number, alpha: number): RgbaColor {
+  const red = clamp(Math.round(75 + tone * 0.3), 0, 255);
+  const green = clamp(Math.round(53 + tone * 0.2), 0, 255);
+  const blue = clamp(Math.round(42 + tone * 0.14), 0, 255);
+
+  return [red, green, blue, alpha];
 }
 
 function getValueColor(

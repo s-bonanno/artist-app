@@ -31,6 +31,7 @@ type CanvasStageProps = {
   onColorStudyPick: (hex: string) => void;
   onColorStudyChange: (update: ColorStudyStatus) => void;
   onValueStudyProcessingChange: (processing: boolean) => void;
+  onValueStudyTonesChange: (tones: number[]) => void;
   onViewportChange: (viewport: WorkspaceState['viewport']) => void;
 };
 
@@ -59,10 +60,13 @@ type ColorStudyStatus = {
   stage: string | null;
 };
 
+type SpatialStudyMode = 'color' | 'grayscale';
+
 type ColorStudyRender = {
   canvas: HTMLCanvasElement;
   swatches: SpatialColorSwatch[];
   drawRect: ImageDrawRect;
+  mode: SpatialStudyMode;
 };
 
 type ImageDrawRect = {
@@ -165,6 +169,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       onColorStudyPick,
       onColorStudyChange,
       onValueStudyProcessingChange,
+      onValueStudyTonesChange,
       onViewportChange,
     },
     forwardedRef,
@@ -174,12 +179,14 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const sampleLoupeRef = useRef<HTMLCanvasElement | null>(null);
     const loadedImageRef = useRef<HTMLImageElement | null>(null);
     const colorStudyRenderRef = useRef<ColorStudyRender | null>(null);
-    const colorStudyCacheRef = useRef<Map<ShapeDetail, ColorStudyRender>>(new Map());
+    const colorStudyCacheRef = useRef<Map<string, ColorStudyRender>>(new Map());
     const colorStudyDetailRef = useRef<ShapeDetail>('balanced');
+    const colorStudyModeRef = useRef<SpatialStudyMode>('color');
     const colorStudySignatureRef = useRef('');
     const colorStudyImageKeyRef = useRef('');
     const colorStudyRequestRef = useRef(0);
     const valueStudySignatureRef = useRef('');
+    const valueStudyTonesRef = useRef<number[]>([]);
     const logicalCanvasSizeRef = useRef(getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm));
     const renderQualityRef = useRef(1);
     const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
@@ -296,10 +303,12 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       const detailIndex = clamp(Math.round(state.values.colorDetail ?? 1), 0, colorStudyDetails.length - 1);
       const detail = colorStudyDetails[detailIndex];
       colorStudyDetailRef.current = detail;
+      const studyMode = getSpatialStudyMode(state.values.mode);
 
-      if (!state.values.enabled || state.values.mode !== 'color') return;
+      if (!state.values.enabled || !studyMode) return;
 
-      const cached = colorStudyCacheRef.current.get(detail);
+      colorStudyModeRef.current = studyMode;
+      const cached = colorStudyCacheRef.current.get(getSpatialStudyCacheKey(studyMode, detail));
       if (cached) {
         colorStudyRenderRef.current = cached;
         onColorStudyChange({
@@ -314,7 +323,9 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       onColorStudyChange({
         processing: true,
-        swatches: colorStudyRenderRef.current?.swatches ?? [],
+        swatches: colorStudyRenderRef.current?.mode === studyMode
+          ? colorStudyRenderRef.current.swatches
+          : [],
         progress: 0,
         stage: 'Preparing crop',
       });
@@ -324,10 +335,11 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     useEffect(() => {
       const loadedImage = loadedImageRef.current;
       const isMovingImage = interactionMode === 'pan';
+      const studyMode = getSpatialStudyMode(state.values.mode);
       const shouldProcess = Boolean(
         loadedImage
         && state.values.enabled
-        && state.values.mode === 'color',
+        && studyMode,
       );
       const requestId = colorStudyRequestRef.current + 1;
       colorStudyRequestRef.current = requestId;
@@ -372,7 +384,10 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       }
 
       const selectedDetail = colorStudyDetailRef.current;
-      const cached = colorStudyCacheRef.current.get(selectedDetail);
+      const selectedMode = studyMode as SpatialStudyMode;
+      colorStudyModeRef.current = selectedMode;
+      const cacheKey = getSpatialStudyCacheKey(selectedMode, selectedDetail);
+      const cached = colorStudyCacheRef.current.get(cacheKey);
       if (cached) {
         colorStudyRenderRef.current = cached;
         onColorStudyChange({
@@ -387,7 +402,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       onColorStudyChange({
         processing: true,
-        swatches: previousRender?.swatches ?? [],
+        swatches: previousRender?.mode === selectedMode ? previousRender.swatches : [],
         progress: 0.03,
         stage: 'Preparing crop',
       });
@@ -438,11 +453,14 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
           Math.max(crop.width, crop.height) / BASE_CANVAS_RENDER_LONG_SIDE,
         );
         applyTonalFilterAdjustments(imageData, state.filters);
+        if (selectedMode === 'grayscale') {
+          convertImageDataToGrayscale(imageData);
+        }
         onColorStudyChange({
           processing: true,
-          swatches: previousRender?.swatches ?? [],
+          swatches: previousRender?.mode === selectedMode ? previousRender.swatches : [],
           progress: 0.06,
-          stage: 'Grouping colours',
+          stage: getSpatialStudyStage(selectedMode, 'Grouping colours'),
         });
 
         worker = new Worker(
@@ -453,12 +471,15 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         worker.onmessage = (event: MessageEvent<ColorStudyWorkerResponse>) => {
           if (event.data.id !== colorStudyRequestRef.current) return;
           if (event.data.type === 'progress') {
-            if (event.data.detail !== colorStudyDetailRef.current) return;
+            if (
+              event.data.detail !== colorStudyDetailRef.current
+              || selectedMode !== colorStudyModeRef.current
+            ) return;
             onColorStudyChange({
               processing: true,
-              swatches: previousRender?.swatches ?? [],
+              swatches: previousRender?.mode === selectedMode ? previousRender.swatches : [],
               progress: event.data.progress,
-              stage: event.data.stage,
+              stage: getSpatialStudyStage(selectedMode, event.data.stage),
             });
             return;
           }
@@ -478,10 +499,17 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
             canvas: resultCanvas,
             swatches: event.data.swatches,
             drawRect: crop.drawRect,
+            mode: selectedMode,
           };
-          colorStudyCacheRef.current.set(event.data.detail, result);
+          colorStudyCacheRef.current.set(
+            getSpatialStudyCacheKey(selectedMode, event.data.detail),
+            result,
+          );
 
-          if (event.data.detail !== colorStudyDetailRef.current) return;
+          if (
+            event.data.detail !== colorStudyDetailRef.current
+            || selectedMode !== colorStudyModeRef.current
+          ) return;
           colorStudyRenderRef.current = result;
           onColorStudyChange({
             processing: false,
@@ -496,7 +524,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
           if (requestId !== colorStudyRequestRef.current) return;
           onColorStudyChange({
             processing: false,
-            swatches: previousRender?.swatches ?? [],
+            swatches: previousRender?.mode === selectedMode ? previousRender.swatches : [],
             progress: 0,
             stage: null,
           });
@@ -573,7 +601,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       ].join(':');
       const isValueStudyRender = (
         shouldApplyValues(state.values)
-        && state.values.mode !== 'color'
+        && state.values.mode === 'map'
         && !state.filters.showOriginal
       );
       const shouldSignalProcessing = (
@@ -703,7 +731,10 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
           renderQuality,
           interactionMode === 'pan' ? null : colorStudyRenderRef.current,
           highlightedColorStudyHex,
+          reportValueStudyTones,
         );
+      } else {
+        reportValueStudyTones([]);
       }
 
       ctx.save();
@@ -722,6 +753,18 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         showMeasurements: state.grid.showMeasurements,
       });
       ctx.restore();
+    }
+
+    function reportValueStudyTones(tones: number[]) {
+      const previousTones = valueStudyTonesRef.current;
+      const hasChanged = (
+        previousTones.length !== tones.length
+        || previousTones.some((tone, index) => tone !== tones[index])
+      );
+      if (!hasChanged) return;
+
+      valueStudyTonesRef.current = tones;
+      onValueStudyTonesChange(tones);
     }
 
     function getCanvasScale(canvas: HTMLCanvasElement) {
@@ -817,11 +860,21 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       };
     }
 
-    function pickColorStudyAtClient(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+    function pickStudyAtClient(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+      if (state.values.mode === 'map') {
+        pickValueStudyAtClient(canvas, clientX, clientY);
+        return;
+      }
+
       const colorStudyRender = colorStudyRenderRef.current;
       const colorStudyCanvas = colorStudyRender?.canvas;
       const colorStudyContext = colorStudyCanvas?.getContext('2d', { willReadFrequently: true });
-      if (!colorStudyRender || !colorStudyCanvas || !colorStudyContext) return;
+      if (
+        !colorStudyRender
+        || !colorStudyCanvas
+        || !colorStudyContext
+        || colorStudyRender.mode !== state.values.mode
+      ) return;
 
       const point = getCanvasPointFromClient(canvas, clientX, clientY);
       const normalizedX = (point.x - colorStudyRender.drawRect.x) / colorStudyRender.drawRect.width;
@@ -835,6 +888,45 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       onColorStudyPick(rgbToHex([pixel[0], pixel[1], pixel[2]]));
     }
 
+    function pickValueStudyAtClient(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+      const tones = valueStudyTonesRef.current;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!tones.length || !context) return;
+
+      const point = getCanvasPointFromClient(canvas, clientX, clientY);
+      const renderQuality = renderQualityRef.current;
+      const centerX = Math.round(point.x * renderQuality);
+      const centerY = Math.round(point.y * renderQuality);
+      const radius = Math.max(2, Math.round(renderQuality * 2));
+      const sourceX = clamp(centerX - radius, 0, Math.max(0, canvas.width - 1));
+      const sourceY = clamp(centerY - radius, 0, Math.max(0, canvas.height - 1));
+      const width = Math.min(radius * 2 + 1, canvas.width - sourceX);
+      const height = Math.min(radius * 2 + 1, canvas.height - sourceY);
+      if (width <= 0 || height <= 0) return;
+
+      const pixels = context.getImageData(sourceX, sourceY, width, height).data;
+      const toneCounts = new Map<number, number>();
+
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (pixels[index + 3] === 0) continue;
+
+        const luminance = (
+          pixels[index] * 0.2126
+          + pixels[index + 1] * 0.7152
+          + pixels[index + 2] * 0.0722
+        );
+        const nearestTone = tones.reduce((nearest, tone) => (
+          Math.abs(tone - luminance) < Math.abs(nearest - luminance) ? tone : nearest
+        ), tones[0]);
+        toneCounts.set(nearestTone, (toneCounts.get(nearestTone) ?? 0) + 1);
+      }
+
+      const selectedTone = Array.from(toneCounts).sort((first, second) => second[1] - first[1])[0]?.[0];
+      if (selectedTone === undefined) return;
+
+      onColorStudyPick(valueToneToHex(selectedTone));
+    }
+
     function handleDoubleClick(event: MouseEvent<HTMLCanvasElement>) {
       if (interactionMode !== 'color-isolate' || performance.now() < ignoreColorIsolateDoubleClickUntilRef.current) {
         return;
@@ -842,7 +934,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
       event.preventDefault();
       event.stopPropagation();
-      pickColorStudyAtClient(event.currentTarget, event.clientX, event.clientY);
+      pickStudyAtClient(event.currentTarget, event.clientX, event.clientY);
     }
 
     function updateSamplePreview(event: PointerEvent<HTMLCanvasElement>, clearWhenOutside = true) {
@@ -1195,7 +1287,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
               <= colorIsolateDoubleTapDistanceThreshold;
 
           if (isDoubleTap) {
-            pickColorStudyAtClient(event.currentTarget, event.clientX, event.clientY);
+            pickStudyAtClient(event.currentTarget, event.clientX, event.clientY);
             lastColorIsolateTapRef.current = null;
             ignoreColorIsolateDoubleClickUntilRef.current = now + colorIsolateDoubleTapInterval;
           } else {
@@ -1572,6 +1664,7 @@ function drawReferenceImage(
   renderQuality: number,
   colorStudyRender: ColorStudyRender | null,
   highlightedColorStudyHex: string | null,
+  onValueStudyTonesChange: (tones: number[]) => void,
 ) {
   const scaledImageRect = scaleImageDrawRect(imageRect, renderQuality);
   const backingCanvasWidth = Math.round(canvasWidth * renderQuality);
@@ -1583,17 +1676,27 @@ function drawReferenceImage(
   ctx.drawImage(image, scaledImageRect.x, scaledImageRect.y, scaledImageRect.width, scaledImageRect.height);
   ctx.restore();
 
-  if (state.filters.showOriginal) return;
+  if (state.filters.showOriginal) {
+    onValueStudyTonesChange([]);
+    return;
+  }
 
   const shouldApplyBaseFilters = hasBaseFilterAdjustments(state.filters);
   const shouldApplyTonalFilters = hasTonalFilterAdjustments(state.filters);
-  const shouldApplyValueMap = shouldApplyValues(state.values) && state.values.mode !== 'color';
-  const shouldApplyColorStudy = Boolean(
+  const shouldApplyValueMap = shouldApplyValues(state.values) && state.values.mode === 'map';
+  const shouldApplySpatialStudy = Boolean(
     colorStudyRender
     && shouldApplyValues(state.values)
-    && state.values.mode === 'color',
+    && colorStudyRender.mode === state.values.mode
+    && getSpatialStudyMode(state.values.mode),
   );
-  if (!shouldApplyBaseFilters && !shouldApplyTonalFilters && !shouldApplyValueMap && !shouldApplyColorStudy) return;
+  if (!shouldApplyValueMap) {
+    onValueStudyTonesChange([]);
+  }
+  if (!shouldApplyBaseFilters && !shouldApplyTonalFilters && !shouldApplyValueMap && !shouldApplySpatialStudy) {
+    onValueStudyTonesChange([]);
+    return;
+  }
 
   const visibleRect = getVisibleImageDataRect(scaledImageRect, backingCanvasWidth, backingCanvasHeight);
   if (!visibleRect) return;
@@ -1607,15 +1710,26 @@ function drawReferenceImage(
       applyTonalFilterAdjustments(imageData, state.filters);
     }
     if (shouldApplyValueMap) {
-      applyValuesToImageData(imageData, state.values);
+      applyValuesToImageData(
+        imageData,
+        state.values,
+        onValueStudyTonesChange,
+        getGrayToneFromHex(highlightedColorStudyHex),
+      );
+    } else {
+      onValueStudyTonesChange([]);
     }
     ctx.putImageData(imageData, visibleRect.x, visibleRect.y);
   }
 
-  if (shouldApplyColorStudy && colorStudyRender) {
+  if (shouldApplySpatialStudy && colorStudyRender) {
     const colorStudyImage = colorStudyRender.canvas;
     const displayedColorStudy = highlightedColorStudyHex
-      ? getColorStudyIsolationImage(colorStudyImage, highlightedColorStudyHex) ?? colorStudyImage
+      ? getColorStudyIsolationImage(
+          colorStudyImage,
+          highlightedColorStudyHex,
+          state.values.mode === 'grayscale',
+        ) ?? colorStudyImage
       : colorStudyImage;
     const scaledColorStudyRect = scaleImageDrawRect(colorStudyRender.drawRect, renderQuality);
     ctx.save();
@@ -1633,10 +1747,15 @@ function drawReferenceImage(
   }
 }
 
-function getColorStudyIsolationImage(source: HTMLCanvasElement, hex: string) {
+function getColorStudyIsolationImage(
+  source: HTMLCanvasElement,
+  hex: string,
+  useWarmTint = false,
+) {
   const normalizedHex = hex.toUpperCase();
   const cachedForSource = colorStudyHighlightCache.get(source) ?? new Map<string, HTMLCanvasElement>();
-  const cached = cachedForSource.get(normalizedHex);
+  const cacheKey = `${normalizedHex}:${useWarmTint ? 'warm' : 'neutral'}`;
+  const cached = cachedForSource.get(cacheKey);
   if (cached) return cached;
 
   const match = /^#([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})$/.exec(normalizedHex);
@@ -1666,10 +1785,16 @@ function getColorStudyIsolationImage(source: HTMLCanvasElement, hex: string) {
         + sourceData.data[index + 1] * 0.7152
         + sourceData.data[index + 2] * 0.0722
       );
-      const neutral = Math.round(94 + luminance * 0.28);
-      isolationData[index] = neutral;
-      isolationData[index + 1] = neutral;
-      isolationData[index + 2] = neutral;
+      if (useWarmTint) {
+        isolationData[index] = Math.round(75 + luminance * 0.3);
+        isolationData[index + 1] = Math.round(53 + luminance * 0.2);
+        isolationData[index + 2] = Math.round(42 + luminance * 0.14);
+      } else {
+        const neutral = Math.round(94 + luminance * 0.28);
+        isolationData[index] = neutral;
+        isolationData[index + 1] = neutral;
+        isolationData[index + 2] = neutral;
+      }
     }
     isolationData[index + 3] = sourceData.data[index + 3];
   }
@@ -1680,7 +1805,7 @@ function getColorStudyIsolationImage(source: HTMLCanvasElement, hex: string) {
   const highlightContext = highlightImage.getContext('2d');
   if (!highlightContext) return null;
   highlightContext.putImageData(new ImageData(isolationData, source.width, source.height), 0, 0);
-  cachedForSource.set(normalizedHex, highlightImage);
+  cachedForSource.set(cacheKey, highlightImage);
   colorStudyHighlightCache.set(source, cachedForSource);
   return highlightImage;
 }
@@ -1793,6 +1918,49 @@ function clampByte(value: number) {
   return Math.round(clamp(value, 0, 255));
 }
 
+function getSpatialStudyMode(mode: WorkspaceState['values']['mode']): SpatialStudyMode | null {
+  return mode === 'color' || mode === 'grayscale' ? mode : null;
+}
+
+function getSpatialStudyCacheKey(mode: SpatialStudyMode, detail: ShapeDetail) {
+  return `${mode}:${detail}`;
+}
+
+function getSpatialStudyStage(mode: SpatialStudyMode, stage: string) {
+  return mode === 'grayscale'
+    ? stage.replace('colours', 'tones')
+    : stage;
+}
+
+function getGrayToneFromHex(hex: string | null) {
+  if (!hex) return null;
+
+  const match = /^#([0-9a-f]{2})\1\1$/i.exec(hex);
+
+  return match ? Number.parseInt(match[1], 16) : null;
+}
+
+function valueToneToHex(tone: number) {
+  const channel = clampByte(tone).toString(16).padStart(2, '0');
+
+  return `#${channel}${channel}${channel}`;
+}
+
+function convertImageDataToGrayscale(imageData: ImageData) {
+  const { data } = imageData;
+
+  for (let index = 0; index < data.length; index += 4) {
+    const tone = clampByte(
+      data[index] * 0.2126
+      + data[index + 1] * 0.7152
+      + data[index + 2] * 0.0722,
+    );
+    data[index] = tone;
+    data[index + 1] = tone;
+    data[index + 2] = tone;
+  }
+}
+
 function sampleImageColor(
   image: HTMLImageElement,
   imageX: number,
@@ -1812,7 +1980,12 @@ function sampleImageColor(
   if (!sampleContext) return [0, 0, 0];
 
   const useFilteredSource = getPaletteSampleSource(state) === 'filtered';
-  const useColorStudy = Boolean(useFilteredSource && state.values.mode === 'color' && colorStudyRender);
+  const useColorStudy = Boolean(
+    useFilteredSource
+    && colorStudyRender
+    && colorStudyRender.mode === state.values.mode
+    && getSpatialStudyMode(state.values.mode),
+  );
 
   if (useColorStudy && colorStudyRender) {
     const colorStudyImage = colorStudyRender.canvas;

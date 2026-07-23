@@ -36,7 +36,7 @@ export function AboutPage({ onClose }: AboutPageProps) {
           <section className="about-section">
             <h3>What’s New</h3>
             <div className="about-steps">
-              <p>Study brings Value, Colour, and Grey analysis together in one focused tool.</p>
+              <p>Study brings Value and Colour analysis together in one focused tool.</p>
               <p>Colour mode simplifies the reference into painterly colour shapes with three levels of detail.</p>
               <p>Choose a detected colour or tap the image to isolate exact colour shapes, then add them to your palette.</p>
             </div>

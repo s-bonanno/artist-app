@@ -70,7 +70,6 @@ type ActiveTool = 'canvas' | 'zoom' | 'grid' | 'values' | 'palette' | 'filters';
 const valueModes: Array<{ id: ValueMode; label: string }> = [
   { id: 'map', label: 'Value' },
   { id: 'color', label: 'Colour' },
-  { id: 'grayscale', label: 'Grey' },
 ];
 const gridGuideTypes: Array<{ id: GridGuideType; label: string }> = [
   { id: 'square', label: 'Square grid' },
@@ -127,6 +126,7 @@ export function Workspace({
     stage: null,
   });
   const [isValueStudyProcessing, setIsValueStudyProcessing] = useState(false);
+  const [valueStudyTones, setValueStudyTones] = useState<number[]>([]);
   const [showColorStudyProcessingMessage, setShowColorStudyProcessingMessage] = useState(false);
   const [highlightedColorStudyHex, setHighlightedColorStudyHex] = useState<string | null>(null);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -150,6 +150,15 @@ export function Workspace({
     state.palette.swatches.find((swatch) => swatch.id === state.palette.selectedSwatchId) ??
     state.palette.swatches[state.palette.swatches.length - 1] ??
     null;
+  const grayStudyTones = useMemo(
+    () => colorStudy.swatches
+      .filter((swatch) => (
+        Math.abs(swatch.red - swatch.green) <= 1
+        && Math.abs(swatch.green - swatch.blue) <= 1
+      ))
+      .sort((first, second) => getSwatchLuminance(first) - getSwatchLuminance(second)),
+    [colorStudy.swatches],
+  );
   const hasOpenToolPanel = Boolean(activeTool) && !isMoveZoomMode;
   const isColorStudyMode = (
     state.values.enabled
@@ -158,13 +167,22 @@ export function Workspace({
   );
   const isValueStudyMode = (
     state.values.enabled
-    && state.values.mode !== 'color'
+    && state.values.mode === 'map'
     && !state.filters.showOriginal
   );
+  const isGrayStudyMode = (
+    state.values.enabled
+    && state.values.mode === 'grayscale'
+    && !state.filters.showOriginal
+  );
+  const isStudyIsolationMode = isValueStudyMode || isColorStudyMode || isGrayStudyMode;
+  const studyIsolationCopy = getStudyIsolationCopy(state.values.mode);
   const studyProcessingMessage = isValueStudyProcessing && isValueStudyMode
     ? 'Updating value study...'
     : colorStudy.processing && showColorStudyProcessingMessage
-      ? 'Updating colour study...'
+      ? isGrayStudyMode
+        ? 'Updating grey study...'
+        : 'Updating colour study...'
       : null;
 
   useEffect(() => {
@@ -207,13 +225,18 @@ export function Workspace({
   }, [workspaceNotice]);
 
   useEffect(() => {
-    if (state.values.enabled && state.values.mode === 'color') return;
     setHighlightedColorStudyHex(null);
-  }, [state.values.enabled, state.values.mode]);
+  }, [state.values.mode]);
 
   useEffect(() => {
-    if (colorStudy.processing) setHighlightedColorStudyHex(null);
-  }, [colorStudy.processing]);
+    if (!state.values.enabled || state.filters.showOriginal) {
+      setHighlightedColorStudyHex(null);
+    }
+  }, [state.filters.showOriginal, state.values.enabled]);
+
+  useEffect(() => {
+    if (colorStudy.processing || isValueStudyProcessing) setHighlightedColorStudyHex(null);
+  }, [colorStudy.processing, isValueStudyProcessing]);
 
   useEffect(() => {
     if (!colorStudy.processing) {
@@ -358,7 +381,7 @@ export function Workspace({
       opacity: Math.min(1, Math.max(0, nextState.opacity)),
     };
 
-    setIsValueStudyProcessing(values.enabled && values.mode !== 'color' && values.opacity > 0);
+    setIsValueStudyProcessing(values.enabled && values.mode === 'map' && values.opacity > 0);
 
     onChange({
       ...state,
@@ -602,7 +625,7 @@ export function Workspace({
     setWorkspaceNotice(`${newSwatches.length} colours added`);
   }
 
-  function toggleColorStudyIsolation(hex: string) {
+  function toggleStudyIsolation(hex: string) {
     const isSelected = highlightedColorStudyHex === hex;
     setHighlightedColorStudyHex(isSelected ? null : hex);
 
@@ -1076,7 +1099,7 @@ export function Workspace({
           <div className="tool-panel-content">
             <div className="option-block">
               <span>Mode</span>
-              <div className="chip-control" data-options="3" aria-label="Study mode">
+              <div className="chip-control" data-options="2" aria-label="Study mode">
                 {valueModes.map((mode) => (
                   <button
                     key={mode.id}
@@ -1106,9 +1129,9 @@ export function Workspace({
               </label>
             ) : null}
 
-            {state.values.mode === 'color' ? (
+            {state.values.mode !== 'map' ? (
               <>
-                <label className="slider-row" data-active-slider={activeSlider === 'values-color-detail'}>
+                <label className="slider-row" data-active-slider={activeSlider === 'values-study-detail'}>
                   <span>Detail</span>
                   <input
                     type="range"
@@ -1120,7 +1143,7 @@ export function Workspace({
                       setHighlightedColorStudyHex(null);
                       updateValues({ enabled: true, colorDetail: Number(event.target.value) });
                     }}
-                    {...getSliderProps('values-color-detail')}
+                    {...getSliderProps('values-study-detail')}
                   />
                   <strong>{colorDetailLabels[state.values.colorDetail ?? 1]}</strong>
                 </label>
@@ -1139,74 +1162,146 @@ export function Workspace({
                   <strong>{Math.round(state.values.opacity * 100)}%</strong>
                 </label>
 
-                <section className="color-study-colors" aria-label="Detected colours">
-                  <div className="color-study-colors-heading">
-                    <span>Colours</span>
-                    {colorStudy.processing ? (
-                      <span className="color-study-processing" role="status">
-                        {colorStudy.stage ?? 'Analysing'}
-                      </span>
-                    ) : null}
-                  </div>
+                {state.values.mode === 'color' ? (
+                  <section className="color-study-colors" aria-label="Detected colours">
+                    <div className="color-study-colors-heading">
+                      <span>Colours</span>
+                      {colorStudy.processing ? (
+                        <span className="color-study-processing" role="status">
+                          {colorStudy.stage ?? 'Analysing'}
+                        </span>
+                      ) : null}
+                    </div>
 
-                  {colorStudy.swatches.length ? (
-                    <div className="color-study-swatches">
-                      {colorStudy.swatches.map((swatch) => {
-                        const isSelected = highlightedColorStudyHex === swatch.hex;
+                    {colorStudy.swatches.length ? (
+                      <div className="color-study-swatches">
+                        {colorStudy.swatches.map((swatch) => {
+                          const isSelected = highlightedColorStudyHex === swatch.hex;
 
-                        return (
+                          return (
+                            <button
+                              key={swatch.hex}
+                              type="button"
+                              title={isSelected ? `Clear ${swatch.hex} isolation` : `Show where ${swatch.hex} appears`}
+                              aria-label={isSelected ? `Clear ${swatch.hex} isolation` : `Show where ${swatch.hex} appears`}
+                              aria-pressed={isSelected}
+                              data-selected={isSelected}
+                              style={{ backgroundColor: swatch.hex }}
+                              onClick={() => toggleStudyIsolation(swatch.hex)}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : colorStudy.processing ? (
+                      <div className="color-study-swatches" data-loading="true" aria-hidden="true">
+                        {Array.from({ length: 8 }, (_, index) => <span key={index} />)}
+                      </div>
+                    ) : (
+                      <span className="color-study-empty">Choose a reference to detect colours.</span>
+                    )}
+                  </section>
+                ) : null}
+
+                {state.values.mode === 'grayscale' ? (
+                  <section className="color-study-colors" aria-label="Detected grey tones">
+                    <div className="color-study-colors-heading">
+                      <span>Tones</span>
+                      {colorStudy.processing ? (
+                        <span className="color-study-processing" role="status">
+                          {colorStudy.stage ?? 'Analysing'}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {grayStudyTones.length ? (
+                      <div className="color-study-swatches">
+                        {grayStudyTones.map((swatch) => {
+                          const isSelected = highlightedColorStudyHex === swatch.hex;
+
+                          return (
                           <button
                             key={swatch.hex}
                             type="button"
-                            title={isSelected ? `Clear ${swatch.hex} isolation` : `Show where ${swatch.hex} appears`}
-                            aria-label={isSelected ? `Clear ${swatch.hex} isolation` : `Show where ${swatch.hex} appears`}
+                            title={isSelected ? `Clear ${swatch.hex} tone isolation` : `Show where ${swatch.hex} appears`}
+                            aria-label={isSelected ? `Clear ${swatch.hex} tone isolation` : `Show where ${swatch.hex} appears`}
                             aria-pressed={isSelected}
                             data-selected={isSelected}
                             style={{ backgroundColor: swatch.hex }}
-                            onClick={() => toggleColorStudyIsolation(swatch.hex)}
+                            onClick={() => toggleStudyIsolation(swatch.hex)}
                           />
-                        );
-                      })}
-                    </div>
-                  ) : colorStudy.processing ? (
-                    <div className="color-study-swatches" data-loading="true" aria-hidden="true">
-                      {Array.from({ length: 8 }, (_, index) => <span key={index} />)}
-                    </div>
-                  ) : (
-                    <span className="color-study-empty">Choose a reference to detect colours.</span>
-                  )}
-                </section>
+                          );
+                        })}
+                      </div>
+                    ) : colorStudy.processing ? (
+                      <div className="color-study-swatches" data-loading="true" aria-hidden="true">
+                        {Array.from({ length: 8 }, (_, index) => <span key={index} />)}
+                      </div>
+                    ) : (
+                      <span className="color-study-empty">Choose a reference to detect tones.</span>
+                    )}
+                  </section>
+                ) : null}
               </>
             ) : (
-              <label className="slider-row" data-active-slider={activeSlider === 'values-simplify'}>
-                <span>Simplify</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="10"
-                  step="1"
-                  value={state.values.simplify}
-                  onChange={(event) => updateValues({ enabled: true, simplify: Number(event.target.value) })}
-                  {...getSliderProps('values-simplify')}
-                />
-                <strong>{state.values.simplify === 0 ? 'Off' : state.values.simplify}</strong>
-              </label>
+              <>
+                <label className="slider-row" data-active-slider={activeSlider === 'values-simplify'}>
+                  <span>Simplify</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    step="1"
+                    value={state.values.simplify}
+                    onChange={(event) => updateValues({ enabled: true, simplify: Number(event.target.value) })}
+                    {...getSliderProps('values-simplify')}
+                  />
+                  <strong>{state.values.simplify === 0 ? 'Off' : state.values.simplify}</strong>
+                </label>
+
+                <label className="slider-row" data-active-slider={activeSlider === 'values-opacity'}>
+                  <span>Opacity</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={state.values.opacity}
+                    onChange={(event) => updateValues({ enabled: true, opacity: Number(event.target.value) })}
+                    {...getSliderProps('values-opacity')}
+                  />
+                  <strong>{Math.round(state.values.opacity * 100)}%</strong>
+                </label>
+              </>
             )}
 
-            {state.values.mode !== 'color' ? (
-              <label className="slider-row" data-active-slider={activeSlider === 'values-opacity'}>
-                <span>Opacity</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={state.values.opacity}
-                  onChange={(event) => updateValues({ enabled: true, opacity: Number(event.target.value) })}
-                  {...getSliderProps('values-opacity')}
-                />
-                <strong>{Math.round(state.values.opacity * 100)}%</strong>
-              </label>
+            {state.values.mode === 'map' && valueStudyTones.length ? (
+              <section className="color-study-colors value-study-colors" aria-label="Value study tones">
+                <div className="color-study-colors-heading">
+                  <span>Values</span>
+                </div>
+                <div className="color-study-swatches value-study-swatches">
+                  {valueStudyTones.map((tone) => {
+                    const hex = valueToneToHex(tone);
+
+                    return (
+                      <button
+                        key={tone}
+                        type="button"
+                        title={highlightedColorStudyHex === hex
+                          ? `Clear ${Math.round((tone / 255) * 100)}% value isolation`
+                          : `Show where ${Math.round((tone / 255) * 100)}% value appears`}
+                        aria-label={highlightedColorStudyHex === hex
+                          ? `Clear ${Math.round((tone / 255) * 100)}% value isolation`
+                          : `Show where ${Math.round((tone / 255) * 100)}% value appears`}
+                        aria-pressed={highlightedColorStudyHex === hex}
+                        data-selected={highlightedColorStudyHex === hex}
+                        style={{ backgroundColor: hex }}
+                        onClick={() => toggleStudyIsolation(hex)}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
             ) : null}
           </div>
         ) : null}
@@ -1428,7 +1523,9 @@ export function Workspace({
         <div
           className="workspace-processing-progress"
           role="progressbar"
-          aria-label={colorStudy.processing ? colorStudy.stage ?? 'Analysing colour study' : 'Updating value study'}
+          aria-label={colorStudy.processing
+            ? colorStudy.stage ?? (isGrayStudyMode ? 'Analysing grey study' : 'Analysing colour study')
+            : 'Updating value study'}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={colorStudy.processing ? Math.round(colorStudy.progress * 100) : undefined}
@@ -1453,7 +1550,7 @@ export function Workspace({
           if (activeTool === 'palette' && isPaletteSampling) return;
           if (
             activeTool === 'values'
-            && isColorStudyMode
+            && isStudyIsolationMode
             && window.matchMedia('(min-width: 960px) and (orientation: landscape)').matches
           ) return;
 
@@ -1487,15 +1584,19 @@ export function Workspace({
             </button>
           </div>
         ) : null}
-        {isColorStudyMode && !isPaletteSampling && !isMoveZoomMode && !colorStudy.processing && !studyProcessingMessage ? (
+        {isStudyIsolationMode && !isPaletteSampling && !isMoveZoomMode && !colorStudy.processing && !studyProcessingMessage ? (
           <div className="sampling-hint color-isolate-hint" data-active={Boolean(highlightedColorStudyHex)}>
             <PaletteIcon size={15} />
             {highlightedColorStudyHex ? (
-              <span>Colour isolate</span>
+              <span>{studyIsolationCopy.activeLabel}</span>
             ) : (
               <>
-                <span className="color-isolate-mouse-instruction">Double-click image to isolate a colour</span>
-                <span className="color-isolate-touch-instruction">Double-tap image to isolate a colour</span>
+                <span className="color-isolate-mouse-instruction">
+                  Double-click image to isolate {studyIsolationCopy.article} {studyIsolationCopy.noun}
+                </span>
+                <span className="color-isolate-touch-instruction">
+                  Double-tap image to isolate {studyIsolationCopy.article} {studyIsolationCopy.noun}
+                </span>
               </>
             )}
             {highlightedColorStudyHex ? (
@@ -1503,7 +1604,7 @@ export function Workspace({
                 <button
                   type="button"
                   className="sample-session-close"
-                  title="Clear colour isolation"
+                  title={`Clear ${studyIsolationCopy.noun} isolation`}
                   onClick={() => setHighlightedColorStudyHex(null)}
                 >
                   <X size={14} />
@@ -1511,7 +1612,7 @@ export function Workspace({
                 <span
                   className="color-isolate-mix-swatch"
                   role="img"
-                  aria-label={`Isolated colour ${highlightedColorStudyHex}`}
+                  aria-label={`Isolated ${studyIsolationCopy.noun} ${highlightedColorStudyHex}`}
                   style={{ backgroundColor: highlightedColorStudyHex }}
                 />
               </>
@@ -1526,7 +1627,7 @@ export function Workspace({
               ? 'sample'
               : isMoveZoomMode
                 ? 'pan'
-                : isColorStudyMode
+                : isStudyIsolationMode
                   ? 'color-isolate'
                   : 'locked'
           }
@@ -1537,6 +1638,7 @@ export function Workspace({
           onColorStudyPick={setHighlightedColorStudyHex}
           onColorStudyChange={setColorStudy}
           onValueStudyProcessingChange={setIsValueStudyProcessing}
+          onValueStudyTonesChange={setValueStudyTones}
           onViewportChange={setViewport}
         />
       </div>
@@ -1711,6 +1813,40 @@ function getToolLabel(tool: ActiveTool) {
 
 function normalizeValueLevels(levels: number) {
   return Math.min(maxValueLevels, Math.max(minValueLevels, Math.round(levels)));
+}
+
+function valueToneToHex(tone: number) {
+  const channel = Math.min(255, Math.max(0, Math.round(tone))).toString(16).padStart(2, '0');
+
+  return `#${channel}${channel}${channel}`;
+}
+
+function getSwatchLuminance(swatch: SpatialColorSwatch) {
+  return swatch.red * 0.2126 + swatch.green * 0.7152 + swatch.blue * 0.0722;
+}
+
+function getStudyIsolationCopy(mode: WorkspaceState['values']['mode']) {
+  if (mode === 'map') {
+    return {
+      activeLabel: 'Value isolate',
+      article: 'a',
+      noun: 'value',
+    };
+  }
+
+  if (mode === 'grayscale') {
+    return {
+      activeLabel: 'Tone isolate',
+      article: 'a',
+      noun: 'tone',
+    };
+  }
+
+  return {
+    activeLabel: 'Colour isolate',
+    article: 'a',
+    noun: 'colour',
+  };
 }
 
 function parsePositiveMeasurement(value: string) {
