@@ -14,6 +14,7 @@ import {
   FolderOpen,
   Grid2X2,
   Info,
+  LoaderCircle,
   Minus,
   MoreHorizontal,
   Moon,
@@ -125,6 +126,8 @@ export function Workspace({
     progress: 0,
     stage: null,
   });
+  const [isValueStudyProcessing, setIsValueStudyProcessing] = useState(false);
+  const [showColorStudyProcessingMessage, setShowColorStudyProcessingMessage] = useState(false);
   const [highlightedColorStudyHex, setHighlightedColorStudyHex] = useState<string | null>(null);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const gridLimits = useMemo(
@@ -153,6 +156,16 @@ export function Workspace({
     && state.values.mode === 'color'
     && !state.filters.showOriginal
   );
+  const isValueStudyMode = (
+    state.values.enabled
+    && state.values.mode !== 'color'
+    && !state.filters.showOriginal
+  );
+  const studyProcessingMessage = isValueStudyProcessing && isValueStudyMode
+    ? 'Updating value study...'
+    : colorStudy.processing && showColorStudyProcessingMessage
+      ? 'Updating colour study...'
+      : null;
 
   useEffect(() => {
     if (!state.image?.src) {
@@ -201,6 +214,23 @@ export function Workspace({
   useEffect(() => {
     if (colorStudy.processing) setHighlightedColorStudyHex(null);
   }, [colorStudy.processing]);
+
+  useEffect(() => {
+    if (!colorStudy.processing) {
+      setShowColorStudyProcessingMessage(false);
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setShowColorStudyProcessingMessage(true);
+    }, 150);
+
+    return () => window.clearTimeout(timeout);
+  }, [colorStudy.processing]);
+
+  useEffect(() => {
+    if (!isValueStudyMode) setIsValueStudyProcessing(false);
+  }, [isValueStudyMode]);
 
   useEffect(() => {
     if (!activeSlider) return undefined;
@@ -319,6 +349,16 @@ export function Workspace({
     const visibleLevels = Math.min(levels, Math.max(0, Math.round(nextState.visibleLevels)));
     const simplify = Math.min(10, Math.max(0, Math.round(nextState.simplify)));
     const colorDetail = Math.min(2, Math.max(0, Math.round(nextState.colorDetail ?? 1)));
+    const values = {
+      ...nextState,
+      levels,
+      visibleLevels,
+      simplify,
+      colorDetail,
+      opacity: Math.min(1, Math.max(0, nextState.opacity)),
+    };
+
+    setIsValueStudyProcessing(values.enabled && values.mode !== 'color' && values.opacity > 0);
 
     onChange({
       ...state,
@@ -326,14 +366,7 @@ export function Workspace({
         ...state.filters,
         showOriginal: false,
       },
-      values: {
-        ...nextState,
-        levels,
-        visibleLevels,
-        simplify,
-        colorDetail,
-        opacity: Math.min(1, Math.max(0, nextState.opacity)),
-      },
+      values,
     });
   }
 
@@ -1391,16 +1424,17 @@ export function Workspace({
         </div>
       </header>
 
-      {colorStudy.processing ? (
+      {colorStudy.processing || isValueStudyProcessing ? (
         <div
           className="workspace-processing-progress"
           role="progressbar"
-          aria-label={colorStudy.stage ?? 'Analysing colour study'}
+          aria-label={colorStudy.processing ? colorStudy.stage ?? 'Analysing colour study' : 'Updating value study'}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={Math.round(colorStudy.progress * 100)}
+          aria-valuenow={colorStudy.processing ? Math.round(colorStudy.progress * 100) : undefined}
+          data-indeterminate={!colorStudy.processing}
         >
-          <span style={{ transform: `scaleX(${Math.max(0.04, colorStudy.progress)})` }} />
+          <span style={colorStudy.processing ? { transform: `scaleX(${Math.max(0.04, colorStudy.progress)})` } : undefined} />
         </div>
       ) : null}
 
@@ -1426,6 +1460,12 @@ export function Workspace({
           closeTool();
         }}
       >
+        {studyProcessingMessage ? (
+          <div className="sampling-hint study-processing-hint" role="status" aria-live="polite">
+            <LoaderCircle className="study-processing-spinner" size={15} aria-hidden="true" />
+            <span>{studyProcessingMessage}</span>
+          </div>
+        ) : null}
         {isPaletteSampling ? (
           <div className="sampling-hint">
             <Pipette size={15} />
@@ -1447,7 +1487,7 @@ export function Workspace({
             </button>
           </div>
         ) : null}
-        {isColorStudyMode && !isPaletteSampling && !isMoveZoomMode ? (
+        {isColorStudyMode && !isPaletteSampling && !isMoveZoomMode && !colorStudy.processing && !studyProcessingMessage ? (
           <div className="sampling-hint color-isolate-hint" data-active={Boolean(highlightedColorStudyHex)}>
             <PaletteIcon size={15} />
             {highlightedColorStudyHex ? (
@@ -1496,6 +1536,7 @@ export function Workspace({
           onSampleColor={addSwatch}
           onColorStudyPick={setHighlightedColorStudyHex}
           onColorStudyChange={setColorStudy}
+          onValueStudyProcessingChange={setIsValueStudyProcessing}
           onViewportChange={setViewport}
         />
       </div>

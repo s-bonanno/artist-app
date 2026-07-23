@@ -30,6 +30,7 @@ type CanvasStageProps = {
   onSampleColor: (sample: ColorSample) => void;
   onColorStudyPick: (hex: string) => void;
   onColorStudyChange: (update: ColorStudyStatus) => void;
+  onValueStudyProcessingChange: (processing: boolean) => void;
   onViewportChange: (viewport: WorkspaceState['viewport']) => void;
 };
 
@@ -163,6 +164,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       onSampleColor,
       onColorStudyPick,
       onColorStudyChange,
+      onValueStudyProcessingChange,
       onViewportChange,
     },
     forwardedRef,
@@ -177,6 +179,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const colorStudySignatureRef = useRef('');
     const colorStudyImageKeyRef = useRef('');
     const colorStudyRequestRef = useRef(0);
+    const valueStudySignatureRef = useRef('');
     const logicalCanvasSizeRef = useRef(getCanvasPixelSize(state.canvas.widthCm, state.canvas.heightCm));
     const renderQualityRef = useRef(1);
     const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
@@ -547,8 +550,72 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }, [interactionMode]);
 
     useEffect(() => {
-      draw();
-    }, [highlightedColorStudyHex, state.canvas, state.filters, state.grid, state.values, state.viewport]);
+      const valueStudySignature = [
+        image?.id ?? '',
+        state.canvas.widthCm,
+        state.canvas.heightCm,
+        state.viewport.zoom.toFixed(4),
+        state.viewport.panX.toFixed(2),
+        state.viewport.panY.toFixed(2),
+        state.filters.enabled,
+        state.filters.blur,
+        state.filters.exposure,
+        state.filters.contrast,
+        state.filters.highlights,
+        state.filters.shadows,
+        state.filters.saturation,
+        state.filters.showOriginal,
+        state.values.enabled,
+        state.values.mode,
+        state.values.levels,
+        state.values.simplify,
+        state.values.opacity,
+      ].join(':');
+      const isValueStudyRender = (
+        shouldApplyValues(state.values)
+        && state.values.mode !== 'color'
+        && !state.filters.showOriginal
+      );
+      const shouldSignalProcessing = (
+        isValueStudyRender
+        && interactionMode !== 'pan'
+        && valueStudySignature !== valueStudySignatureRef.current
+      );
+
+      if (interactionMode !== 'pan') {
+        valueStudySignatureRef.current = valueStudySignature;
+      }
+
+      if (!shouldSignalProcessing) {
+        draw();
+        onValueStudyProcessingChange(false);
+        return undefined;
+      }
+
+      onValueStudyProcessingChange(true);
+      let drawFrame = 0;
+      const messageFrame = window.requestAnimationFrame(() => {
+        drawFrame = window.requestAnimationFrame(() => {
+          draw();
+          onValueStudyProcessingChange(false);
+        });
+      });
+
+      return () => {
+        window.cancelAnimationFrame(messageFrame);
+        if (drawFrame) window.cancelAnimationFrame(drawFrame);
+      };
+    }, [
+      highlightedColorStudyHex,
+      image?.id,
+      interactionMode,
+      onValueStudyProcessingChange,
+      state.canvas,
+      state.filters,
+      state.grid,
+      state.values,
+      state.viewport,
+    ]);
 
     useEffect(() => {
       const { width, height } = logicalCanvasSizeRef.current;
