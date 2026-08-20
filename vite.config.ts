@@ -1,10 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/artist-app/' : '/',
+export default defineConfig({
+  base: '/',
   build: {
     target: ['es2019', 'safari13'],
   },
   plugins: [react()],
-}));
+});
