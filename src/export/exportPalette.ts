@@ -41,7 +41,7 @@ export function exportPalette({ swatches, image }: ExportPaletteOptions) {
 
   context.fillStyle = '#a1a1a6';
   context.font = subtitleFont;
-  context.fillText(image?.title ?? 'Art Assistant reference', margin, margin + 62);
+  context.fillText(image?.title ?? 'From Reference study', margin, margin + 62);
 
   swatches.forEach((swatch, index) => {
     const column = index % columns;
@@ -69,7 +69,7 @@ export function exportPalette({ swatches, image }: ExportPaletteOptions) {
   context.fillStyle = '#6f7178';
   context.font = smallFont;
   context.textAlign = 'right';
-  context.fillText('Art Assistant', sheetWidth - margin, sheetHeight - margin + 28);
+  context.fillText('From Reference', sheetWidth - margin, sheetHeight - margin + 28);
 
   canvas.toBlob((blob) => {
     if (!blob) return;

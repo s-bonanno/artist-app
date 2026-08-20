@@ -301,7 +301,7 @@ const managerHtml = String.raw`<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Art Assistant Library Manager</title>
+    <title>From Reference Library Manager</title>
     <style>
       :root {
         color-scheme: dark;
@@ -581,7 +581,7 @@ const managerHtml = String.raw`<!doctype html>
     <main class="manager-shell">
       <header class="manager-topbar">
         <div>
-          <h1>Art Assistant Library Manager</h1>
+          <h1>From Reference Library Manager</h1>
           <p>
             Local-only tool for reviewing library images, editing tags or collections, and removing an entry from the
             app metadata. It does not add new image files or generate thumbnails.

@@ -523,10 +523,10 @@ export function ReferenceLibrary({
   return (
     <main className="gallery-screen" aria-label="Reference library">
       <header className="gallery-topbar">
-        <button type="button" className="top-icon-button workspace-info-button" title="About Art Assistant" onClick={onOpenAbout}>
+        <button type="button" className="top-icon-button workspace-info-button" title="About From Reference" onClick={onOpenAbout}>
           <Info size={18} />
         </button>
-        <h1>Art Assistant</h1>
+        <h1>From Reference</h1>
         <label className="top-icon-button gallery-upload-button" title="Upload image">
           <ImagePlus size={19} />
           <input
@@ -844,7 +844,7 @@ export function ReferenceLibrary({
           }}
         >
           <div className="reference-preview-topbar" data-layout="preview">
-            <button type="button" className="top-icon-button workspace-info-button" title="About Art Assistant" onClick={onOpenAbout}>
+            <button type="button" className="top-icon-button workspace-info-button" title="About From Reference" onClick={onOpenAbout}>
               <Info size={18} />
             </button>
             <button type="button" className="top-icon-button" title="Back to library" onClick={closeLibraryPreview}>

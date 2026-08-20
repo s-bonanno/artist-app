@@ -1446,7 +1446,7 @@ export function Workspace({
   return (
     <main className="edit-screen" data-tool-open={hasOpenToolPanel}>
       <header className="edit-topbar">
-        <button type="button" className="top-icon-button workspace-info-button" title="About Art Assistant" onClick={onOpenAbout}>
+        <button type="button" className="top-icon-button workspace-info-button" title="About From Reference" onClick={onOpenAbout}>
           <Info size={19} />
         </button>
         <button type="button" className="top-icon-button" title="Back to library" onClick={requestLeaveWorkspace}>

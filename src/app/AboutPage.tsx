@@ -10,7 +10,7 @@ const appVersion = packageJson.version;
 
 export function AboutPage({ onClose }: AboutPageProps) {
   return (
-    <section className="about-page" aria-label="About Art Assistant" role="dialog" aria-modal="true">
+    <section className="about-page" aria-label="About From Reference" role="dialog" aria-modal="true">
       <div className="reference-preview-topbar">
         <button type="button" className="top-icon-button" title="Close about" onClick={onClose}>
           <X size={20} />
@@ -24,7 +24,7 @@ export function AboutPage({ onClose }: AboutPageProps) {
           <section className="about-intro">
             <img className="about-signature" src={signatureLogoSrc} alt="Bonanno" />
             <div className="about-title-group">
-              <h2>Art Assistant</h2>
+              <h2>From Reference</h2>
               <span>Version {appVersion}</span>
             </div>
             <p>
