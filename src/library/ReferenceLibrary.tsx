@@ -94,6 +94,12 @@ const browseCategoryTags = new Set(libraryCategories.flatMap((category) => categ
 
 const libraryCollections: ReferenceCollection[] = [
   {
+    id: 'master-drawings',
+    title: 'Master Drawings',
+    description: 'Figure, portrait, and anatomy studies from the Renaissance to the early twentieth century, from beginner to advanced.',
+    coverImageId: 'drawing-michelangelo-buonarroti-studies-for-the-libyan-sibyl',
+  },
+  {
     id: 'bargue-plates',
     title: 'Bargue Plates',
     description: 'Academic drawing plates for proportion, contour, and value study.',
