@@ -1522,7 +1522,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
                 <span>{Math.round(viewTransform.zoom * 100)}%</span>
                 <strong>Fit</strong>
               </button>
-            ) : <span className="view-zoom-label">{Math.round(viewTransform.zoom * 100)}%</span>}
+            ) : null}
             <button
               type="button"
               className="view-lock-button"
@@ -1532,7 +1532,6 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
               onClick={onToggleViewLock}
             >
               {state.viewLocked ? <Lock size={15} aria-hidden="true" /> : <Unlock size={15} aria-hidden="true" />}
-              {state.viewLocked ? <span>Locked</span> : null}
             </button>
           </div>
         ) : null}

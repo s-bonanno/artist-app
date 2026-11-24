@@ -1795,8 +1795,16 @@ button:disabled,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
-  padding: 0 3px;
+}
+
+.view-fit-button,
+.view-lock-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 9px;
   border: 1px solid rgb(255 255 255 / 0.1);
   border-radius: 3px;
   color: #f5f5f7;
@@ -1807,6 +1815,7 @@ button:disabled,
   font: inherit;
   font-size: 11px;
   font-weight: 400;
+  cursor: pointer;
 }
 
 .view-fit-button span {
@@ -1817,27 +1826,12 @@ button:disabled,
   font-weight: 500;
 }
 
-.view-fit-button,
 .view-lock-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
+  width: 32px;
+  padding: 0;
 }
 
-.view-lock-button[aria-pressed='true'] { color: #bcdcff; }
 .view-controls button:focus-visible { outline: 2px solid #7ab7ff; outline-offset: -2px; }
-.view-controls button:hover { background: rgb(255 255 255 / 0.08); }
-.view-zoom-label { padding-left: 6px; color: #a1a1a6; }
 .view-lock-help { margin: 0; font-size: 12px; color: #a1a1a6; }
 
 .sample-loupe {
