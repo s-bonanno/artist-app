@@ -21,6 +21,22 @@ npm install
 npm run dev
 ```
 
+## Session Restoration
+
+The app remembers the last screen on the current browser/device: library tab, category or collection and vertical scroll position; an open reference preview (including its zoom/pan); or the study workspace and viewing zoom/pan. Browsing does not replace the last study, which remains available through Continue last reference.
+
+Navigation is stored separately from study data in localStorage. Uploaded images remain in IndexedDB. Viewing offsets are normalized to the fitted canvas size so resizing preserves the focal point. Workspace changes save after 400 ms and flush on `visibilitychange` (hidden) and `pagehide`. Missing references and unavailable/corrupt storage fall back safely; old workspaces without viewing state open at Fit. Closing transient tool panels, menus and confirmation dialogs is intentional. Clearing browser data also clears this local session; this is not cross-device sync.
+
+Regression checks (requires Playwright and its Chromium/WebKit browsers in the development environment):
+
+```bash
+node scripts/test-session-restoration.mjs
+# Optional: use a preinstalled Playwright module or an explicit screenshot directory.
+PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs SESSION_TEST_OUTPUT=/absolute/output/path node scripts/test-session-restoration.mjs
+```
+
+The suite covers library/category/Saved navigation, scroll, preview restoration, study zoom/pan, background flushing, legacy data, storage errors, touch pinch, and uploaded images across a complete restart of a temporary browser profile. Pass a URL as the first argument to test a deployment with isolated browser data. Mobile WebKit automation is not a physical iOS/PWA test.
+
 ## Local Library Manager
 
 Use this when you want to review the library, adjust tags or collections, or remove an image from the app metadata without editing code by hand.

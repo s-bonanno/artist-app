@@ -33,6 +33,7 @@ type CanvasStageProps = {
   onValueStudyProcessingChange: (processing: boolean) => void;
   onValueStudyTonesChange: (tones: number[]) => void;
   onViewportChange: (viewport: WorkspaceState['viewport']) => void;
+  onViewChange: (view: WorkspaceState['view']) => void;
 };
 
 type ColorStudyWorkerProgressResponse = SpatialColorStudyProgress & {
@@ -171,6 +172,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       onValueStudyProcessingChange,
       onValueStudyTonesChange,
       onViewportChange,
+      onViewChange,
     },
     forwardedRef,
   ) {
@@ -204,8 +206,12 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     const [isPanning, setIsPanning] = useState(false);
     const [isViewPanning, setIsViewPanning] = useState(false);
     const [isSpacePressed, setIsSpacePressed] = useState(false);
-    const [viewTransform, setViewTransform] = useState<ViewTransform>(defaultViewTransform);
     const [canvasDisplaySize, setCanvasDisplaySize] = useState<CanvasDisplaySize | null>(null);
+    const viewTransform: ViewTransform = {
+      zoom: state.view.zoom,
+      panX: state.view.panX * (canvasDisplaySize?.width ?? 0),
+      panY: state.view.panY * (canvasDisplaySize?.height ?? 0),
+    };
     const [samplePreview, setSamplePreview] = useState<SamplePreview | null>(null);
     const [loadedImageRevision, setLoadedImageRevision] = useState(0);
     const isViewAdjusted =
@@ -266,7 +272,6 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }, []);
 
     useEffect(() => {
-      applyViewTransform(defaultViewTransform);
       setIsViewPanning(false);
       lastViewPointerRef.current = null;
       touchPointersRef.current.clear();
@@ -777,8 +782,13 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function applyViewTransform(nextTransform: ViewTransform) {
+      if (!canvasDisplaySize) return;
       viewTransformRef.current = nextTransform;
-      setViewTransform(nextTransform);
+      onViewChange({
+        zoom: nextTransform.zoom,
+        panX: nextTransform.panX / canvasDisplaySize.width,
+        panY: nextTransform.panY / canvasDisplaySize.height,
+      });
     }
 
     function applyViewport(nextViewport: WorkspaceState['viewport']) {

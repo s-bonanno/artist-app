@@ -745,6 +745,7 @@ export function Workspace({
       ...state,
       canvas: { ...canvas },
       viewport: { ...initialWorkspaceState.viewport },
+      view: { ...initialWorkspaceState.view },
       grid: { ...initialWorkspaceState.grid },
       filters: { ...initialWorkspaceState.filters },
       values: { ...initialWorkspaceState.values },
@@ -1640,6 +1641,7 @@ export function Workspace({
           onValueStudyProcessingChange={setIsValueStudyProcessing}
           onValueStudyTonesChange={setValueStudyTones}
           onViewportChange={setViewport}
+          onViewChange={(view) => onChange({ ...state, view })}
         />
       </div>
 

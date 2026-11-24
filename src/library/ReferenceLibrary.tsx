@@ -1,5 +1,6 @@
 import { ArrowLeft, Bookmark, Grid2X2, History, ImagePlus, Info, Trash2, Upload, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from 'react';
+import { defaultSavedView, loadLibraryLocation, saveLibraryLocation, type LibraryLocation } from '../storage/sessionStorage';
 import type { RestoredSavedReference } from '../storage/workspaceStorage';
 import type { ReferenceCollection, ReferenceImage } from './referenceTypes';
 
@@ -174,10 +175,18 @@ export function ReferenceLibrary({
   onDeleteSavedReference,
   onOpenAbout,
 }: ReferenceLibraryProps) {
-  const [activeTab, setActiveTab] = useState<LibraryTab>('upload');
-  const [activeCategoryId, setActiveCategoryId] = useState('overview');
-  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
-  const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(null);
+  const [initialLocation] = useState(loadLibraryLocation);
+  const [activeTab, setActiveTab] = useState<LibraryTab>(initialLocation.activeTab);
+  const [activeCategoryId, setActiveCategoryId] = useState(
+    initialLocation.categoryId === 'overview' || libraryCategories.some(category => category.id === initialLocation.categoryId)
+      ? initialLocation.categoryId : 'overview',
+  );
+  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(
+    libraryCollections.some(collection => collection.id === initialLocation.collectionId) ? initialLocation.collectionId : null,
+  );
+  const [previewImage, setPreviewImage] = useState<ReferenceImage | null>(
+    references.find(reference => reference.id === initialLocation.previewId) ?? null,
+  );
   const [previewTransform, setPreviewTransform] = useState<PreviewTransform>(defaultPreviewTransform);
   const [previewBaseSize, setPreviewBaseSize] = useState<PreviewImageSize | null>(null);
   const [isPreviewImageLoading, setIsPreviewImageLoading] = useState(false);
@@ -191,6 +200,12 @@ export function ReferenceLibrary({
   const previewTransformRef = useRef<PreviewTransform>(defaultPreviewTransform);
   const previewPointersRef = useRef<Map<number, PreviewPointer>>(new Map());
   const previewGestureRef = useRef<PreviewGesture | null>(null);
+  const previewBaseSizeRef = useRef<PreviewImageSize | null>(null);
+  const previousPreviewId = useRef(previewImage?.id);
+  const pendingPreviewView = useRef(previewImage ? initialLocation.previewView : null);
+  const libraryLocationRef = useRef<LibraryLocation>(initialLocation);
+  const browsePosition = useRef({ key: `${activeTab}:${activeCategoryId}:${activeCollectionId}`, top: initialLocation.scrollTop });
+  const isRestoringScroll = useRef(true);
 
   const availableCategories = useMemo(() => {
     return libraryCategories
@@ -245,23 +260,70 @@ export function ReferenceLibrary({
   }, [previewImage, references]);
   const isLibraryOverview = activeCategoryId === 'overview' && !activeCollection;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return undefined;
-
+    const key = `${activeTab}:${activeCategoryId}:${activeCollectionId}`;
+    if (browsePosition.current.key !== key) browsePosition.current = { key, top: 0 };
+    isRestoringScroll.current = true;
+    content.scrollTop = browsePosition.current.top;
+    // WebKit can lay out the scroller again while the preview receives focus.
+    // Do not let that programmatic scroll overwrite the saved browse position.
     const frame = window.requestAnimationFrame(() => {
-      content.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      content.scrollTop = browsePosition.current.top;
+      isRestoringScroll.current = false;
+      libraryLocationRef.current = { ...libraryLocationRef.current, scrollTop: browsePosition.current.top };
+      saveLibraryLocation(libraryLocationRef.current);
     });
-
     return () => window.cancelAnimationFrame(frame);
-  }, [activeTab, activeCategoryId, activeCollectionId]);
+  }, [activeTab, activeCategoryId, activeCollectionId, previewImage?.id]);
+
+  useLayoutEffect(() => {
+    libraryLocationRef.current = {
+      activeTab, categoryId: activeCategoryId, collectionId: activeCollectionId,
+      previewId: previewImage?.id ?? null,
+      previewView: pendingPreviewView.current ?? (previewBaseSize ? {
+        zoom: previewTransform.scale,
+        panX: previewTransform.x / previewBaseSize.width,
+        panY: previewTransform.y / previewBaseSize.height,
+      } : defaultSavedView),
+      scrollTop: isRestoringScroll.current || previewImage
+        ? browsePosition.current.top
+        : contentRef.current?.scrollTop ?? browsePosition.current.top,
+    };
+    saveLibraryLocation(libraryLocationRef.current);
+  }, [activeTab, activeCategoryId, activeCollectionId, previewImage, previewTransform, previewBaseSize]);
+
+  function rememberScroll() {
+    if (isRestoringScroll.current || previewImage) return;
+    const top = contentRef.current?.scrollTop ?? 0;
+    browsePosition.current.top = top;
+    libraryLocationRef.current = { ...libraryLocationRef.current, scrollTop: top };
+    saveLibraryLocation(libraryLocationRef.current);
+  }
+
+  useEffect(() => {
+    const flush = () => saveLibraryLocation(libraryLocationRef.current);
+    const onVisibilityChange = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     previewTransformRef.current = previewTransform;
   }, [previewTransform]);
 
   useEffect(() => {
-    resetPreviewTransform();
+    if (previousPreviewId.current !== previewImage?.id) {
+      pendingPreviewView.current = null;
+      previewBaseSizeRef.current = null;
+      resetPreviewTransform();
+      previousPreviewId.current = previewImage?.id;
+    }
     setPreviewBaseSize(null);
     setIsPreviewImageLoading(Boolean(previewImage));
     setIsRelatedOpen(false);
@@ -271,7 +333,7 @@ export function ReferenceLibrary({
     if (!previewImage) return undefined;
 
     const frameId = window.requestAnimationFrame(() => {
-      previewDialogRef.current?.focus();
+      previewDialogRef.current?.focus({ preventScroll: true });
     });
 
     return () => window.cancelAnimationFrame(frameId);
@@ -330,6 +392,7 @@ export function ReferenceLibrary({
     if (!previewImage) return;
 
     onSelectImage(previewImage);
+    closeLibraryPreview();
   }
 
   function resetPreviewTransform() {
@@ -342,7 +405,21 @@ export function ReferenceLibrary({
 
   function updatePreviewBaseSize() {
     const nextSize = getPreviewBaseImageSize(previewFrameRef.current, previewImageRef.current);
+    if (!nextSize || !previewImageRef.current?.naturalWidth) return;
+    const restore = pendingPreviewView.current;
+    const previousSize = previewBaseSizeRef.current;
+    if (restore) {
+      previewTransformRef.current = { scale: restore.zoom, x: restore.panX * nextSize.width, y: restore.panY * nextSize.height };
+      pendingPreviewView.current = null;
+    } else if (previousSize) {
+      previewTransformRef.current = {
+        ...previewTransformRef.current,
+        x: previewTransformRef.current.x * nextSize.width / previousSize.width,
+        y: previewTransformRef.current.y * nextSize.height / previousSize.height,
+      };
+    }
 
+    previewBaseSizeRef.current = nextSize;
     setPreviewBaseSize(nextSize);
 
     if (previewFrameRef.current && previewImageRef.current) {
@@ -544,7 +621,7 @@ export function ReferenceLibrary({
         </label>
       </header>
 
-      <section className="gallery-content" ref={contentRef}>
+      <section className="gallery-content" ref={contentRef} onScroll={rememberScroll}>
         {activeTab === 'upload' ? (
           <div className="start-panel">
             <div className="start-choice-grid" data-has-continue={Boolean(lastWorkspaceImage)}>

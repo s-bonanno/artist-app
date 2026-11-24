@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { loadAppView, saveAppView, type AppView } from '../storage/sessionStorage';
 import { references } from '../data/references';
 import { ReferenceLibrary } from '../library/ReferenceLibrary';
 import type { ReferenceImage } from '../library/referenceTypes';
@@ -24,7 +25,6 @@ import { getImageOrientationFromDimensions, orientCanvasToImage, type ImageOrien
 import { AboutPage } from './AboutPage';
 import { initialWorkspaceState, type WorkspaceState } from './appState';
 
-type AppView = 'gallery' | 'edit';
 type DefaultSettingsState = {
   settings: WorkspaceDefaults;
   isCustom: boolean;
@@ -37,14 +37,19 @@ export function App() {
   const [savedReferences, setSavedReferences] = useState<RestoredSavedReference[]>([]);
   const [activeSavedReferenceId, setActiveSavedReferenceId] = useState<string | null>(loadTrackedSavedReference);
   const [view, setView] = useState<AppView>('gallery');
+  const [isRestoring, setIsRestoring] = useState(true);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const imageSelectionId = useRef(0);
   const sessionOnlyUploadIds = useRef(new Set<string>());
+  const latestWorkspace = useRef({ state: workspaceState, savedId: activeSavedReferenceId });
+  useLayoutEffect(() => {
+    latestWorkspace.current = { state: workspaceState, savedId: activeSavedReferenceId };
+  }, [workspaceState, activeSavedReferenceId]);
 
   useEffect(() => {
     let isMounted = true;
 
-    loadLastWorkspace(references)
+    const workspaceRestore = loadLastWorkspace(references)
       .then((restoredWorkspace) => {
         if (!isMounted) return;
 
@@ -56,12 +61,13 @@ export function App() {
 
         setWorkspaceState(restoredWorkspace.state);
         setLastWorkspaceState(restoredWorkspace.state);
+        setView(loadAppView());
       })
       .catch((error) => {
         console.warn('Unable to restore the last workspace.', error);
       });
 
-    loadSavedReferences(references)
+    const referencesRestore = loadSavedReferences(references)
       .then((restoredReferences) => {
         if (!isMounted) return;
 
@@ -78,12 +84,47 @@ export function App() {
         console.warn('Unable to restore saved references.', error);
       });
 
+    Promise.all([workspaceRestore, referencesRestore]).finally(() => {
+      if (isMounted) setIsRestoring(false);
+    });
+
     return () => {
       isMounted = false;
     };
   }, []);
 
+  useLayoutEffect(() => {
+    if (!isRestoring) saveAppView(view);
+  }, [view, isRestoring]);
+
+  function persistWorkspace(state: WorkspaceState, savedId: string | null) {
+    if (!state.image || (state.image.sourceType === 'upload' && sessionOnlyUploadIds.current.has(state.image.id))) return;
+    saveLastWorkspace(state).catch((error) => console.warn('Unable to save the last workspace.', error));
+    try {
+      if (savedId && getSavedReferenceId(state.image) === savedId) {
+        const savedReference = saveReferenceWorkspace(state);
+        if (savedReference) updateSavedReferenceList(savedReference, setSavedReferences);
+      }
+    } catch (error) { console.warn('Unable to update the saved reference.', error); }
+  }
+
   useEffect(() => {
+    if (isRestoring) return;
+    const flush = () => {
+      const { state, savedId } = latestWorkspace.current;
+      persistWorkspace(state, savedId);
+    };
+    const onVisibilityChange = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [isRestoring]);
+
+  useEffect(() => {
+    if (isRestoring) return;
     if (!workspaceState.image) return undefined;
     const workspaceImage = workspaceState.image;
     if (workspaceImage.sourceType === 'upload' && sessionOnlyUploadIds.current.has(workspaceImage.id)) {
@@ -91,21 +132,11 @@ export function App() {
     }
 
     const timeout = window.setTimeout(() => {
-      saveLastWorkspace(workspaceState).catch((error) => {
-        console.warn('Unable to save the last workspace.', error);
-      });
-
-      if (activeSavedReferenceId && getSavedReferenceId(workspaceImage) === activeSavedReferenceId) {
-        const savedReference = saveReferenceWorkspace(workspaceState);
-
-        if (savedReference) {
-          updateSavedReferenceList(savedReference, setSavedReferences);
-        }
-      }
+      persistWorkspace(workspaceState, activeSavedReferenceId);
     }, 400);
 
     return () => window.clearTimeout(timeout);
-  }, [activeSavedReferenceId, workspaceState]);
+  }, [activeSavedReferenceId, workspaceState, isRestoring]);
 
   async function selectImage(image: ReferenceImage) {
     const selectionId = imageSelectionId.current + 1;
@@ -207,6 +238,8 @@ export function App() {
     workspaceState.image && activeSavedReferenceId === getSavedReferenceId(workspaceState.image),
   );
 
+  if (isRestoring) return <div className="app-shell" role="status" aria-label="Restoring your session" />;
+
   return (
     <div className="app-shell" data-view={view}>
       {view === 'gallery' ? (
@@ -256,6 +289,7 @@ function createWorkspaceFromDefaults(
   return {
     canvas: imageOrientation ? orientCanvasToImage(defaults.canvas, imageOrientation) : { ...defaults.canvas },
     viewport: { ...initialWorkspaceState.viewport },
+    view: { ...initialWorkspaceState.view },
     grid: { ...defaults.grid },
     filters: { ...defaults.filters, showOriginal: false },
     values: { ...defaults.values },

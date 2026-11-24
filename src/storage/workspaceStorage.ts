@@ -1,4 +1,5 @@
 import { initialWorkspaceState, type WorkspaceState } from '../app/appState';
+import { normalizeSavedView } from './sessionStorage';
 import type { ReferenceImage } from '../library/referenceTypes';
 
 const databaseName = 'art-assistant-local';
@@ -150,11 +151,13 @@ export function saveTrackedSavedReference(savedReferenceId: string) {
 }
 
 export function loadTrackedSavedReference() {
-  return window.localStorage.getItem(trackedSavedReferenceKey);
+  try { return window.localStorage.getItem(trackedSavedReferenceKey); }
+  catch { return null; }
 }
 
 export function clearTrackedSavedReference() {
-  window.localStorage.removeItem(trackedSavedReferenceKey);
+  try { window.localStorage.removeItem(trackedSavedReferenceKey); }
+  catch { /* Browsing remains available when browser storage is blocked. */ }
 }
 
 export function getWorkspaceDefaults(state: WorkspaceState): WorkspaceDefaults {
@@ -290,6 +293,7 @@ function normalizeStoredState(state: Partial<Omit<WorkspaceState, 'image'>>): Om
       : null;
 
   return {
+    view: normalizeSavedView(state.view),
     canvas: {
       ...initialWorkspaceState.canvas,
       ...state.canvas,
