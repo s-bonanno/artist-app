@@ -36,9 +36,9 @@ export function AboutPage({ onClose }: AboutPageProps) {
           <section className="about-section">
             <h3>What’s New</h3>
             <div className="about-steps">
-              <p>Study brings Value and Colour analysis together in one focused tool.</p>
-              <p>Colour mode simplifies the reference into painterly colour shapes with three levels of detail.</p>
-              <p>Choose a detected colour or tap the image to isolate exact colour shapes, then add them to your palette.</p>
+              <p>Pick up where you left off: the app remembers your reference, zoom, position and library location.</p>
+              <p>Lock your view to prevent accidental movement while drawing, with the lock remembered between sessions.</p>
+              <p>New drawing references include Michelangelo figure studies and portraits by Leighton, Rossetti and Burne-Jones.</p>
             </div>
           </section>
 
