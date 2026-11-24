@@ -31,6 +31,17 @@ try {
     const canvas=page.locator('canvas[aria-label="Reference workspace canvas"]');
     await page.getByRole('button',{name:'Lock view',exact:true}).waitFor();
     await page.waitForFunction(()=>document.querySelector('canvas')?.style.width);
+    // Production image downloads can finish after the canvas and grid appear.
+    // Wait for the light drawing paper, not merely a sized (empty) canvas.
+    await page.waitForFunction(()=>{
+      const c=document.querySelector('canvas');if(!c)return false;
+      const ctx=c.getContext('2d');let painted=0;
+      for(let i=0;i<10;i++) {
+        const p=ctx.getImageData(c.width/2+i*7,c.height/2+i*11,1,1).data;
+        if(Math.max(p[0],p[1],p[2])>65)painted++;
+      }
+      return painted>=8;
+    });
     await flush(page);const before=await read(page);
     assert.equal(before.viewLocked,false,'Legacy studies start unlocked');
     await page.getByRole('button',{name:'Lock view',exact:true}).click();
