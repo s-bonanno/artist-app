@@ -29,8 +29,11 @@ Navigation is stored separately from study data in localStorage. Uploaded images
 
 Regression checks (requires Playwright and its Chromium/WebKit browsers in the development environment):
 
+The workspace padlock beside Fit prevents gesture zoom/pan and disables crop/reposition controls while leaving study, grid, filters and sampling usable. Fit is hidden while locked. Lock/unlock uses the existing brief notification; the lock is stored with the workspace and saved reference. New references and older saved data start unlocked. The lock is available at Fit as well as when zoomed in.
+
 ```bash
 node scripts/test-session-restoration.mjs
+node scripts/test-view-lock.mjs
 # Optional: use a preinstalled Playwright module or an explicit screenshot directory.
 PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs SESSION_TEST_OUTPUT=/absolute/output/path node scripts/test-session-restoration.mjs
 ```

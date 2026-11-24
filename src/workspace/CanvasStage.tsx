@@ -9,6 +9,7 @@ import {
   WheelEvent,
 } from 'react';
 import type { WorkspaceState } from '../app/appState';
+import { Lock, Unlock } from 'lucide-react';
 import { drawGridGuides } from '../grid/drawGrid';
 import type { ReferenceImage } from '../library/referenceTypes';
 import { rgbToHex } from '../palette/colorUtils';
@@ -34,6 +35,7 @@ type CanvasStageProps = {
   onValueStudyTonesChange: (tones: number[]) => void;
   onViewportChange: (viewport: WorkspaceState['viewport']) => void;
   onViewChange: (view: WorkspaceState['view']) => void;
+  onToggleViewLock: () => void;
 };
 
 type ColorStudyWorkerProgressResponse = SpatialColorStudyProgress & {
@@ -173,6 +175,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
       onValueStudyTonesChange,
       onViewportChange,
       onViewChange,
+      onToggleViewLock,
     },
     forwardedRef,
   ) {
@@ -273,11 +276,13 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
     useEffect(() => {
       setIsViewPanning(false);
+      setIsPanning(false);
+      lastPointerRef.current = null;
       lastViewPointerRef.current = null;
       touchPointersRef.current.clear();
       touchGestureRef.current = null;
       didUseMultiTouchRef.current = false;
-    }, [image?.id, state.canvas.widthCm, state.canvas.heightCm]);
+    }, [image?.id, state.canvas.widthCm, state.canvas.heightCm, state.viewLocked]);
 
     useEffect(() => {
       if (!image) {
@@ -782,7 +787,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function applyViewTransform(nextTransform: ViewTransform) {
-      if (!canvasDisplaySize) return;
+      if (!canvasDisplaySize || state.viewLocked) return;
       viewTransformRef.current = nextTransform;
       onViewChange({
         zoom: nextTransform.zoom,
@@ -792,6 +797,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
     }
 
     function applyViewport(nextViewport: WorkspaceState['viewport']) {
+      if (state.viewLocked) return;
       viewportRef.current = nextViewport;
       onViewportChange(nextViewport);
     }
@@ -1032,11 +1038,13 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         startViewport: viewportRef.current,
       };
 
-      setIsPanning(target === 'image');
-      setIsViewPanning(target === 'view');
+      setIsPanning(!state.viewLocked && target === 'image');
+      setIsViewPanning(!state.viewLocked && target === 'view');
     }
 
     function updateTouchGesture(canvas: HTMLCanvasElement) {
+      // Keep touch tracking for study double-taps, but never transform a locked view.
+      if (state.viewLocked) return;
       const pointers = getActiveTouchPointers();
       if (!pointers.length) return;
 
@@ -1166,7 +1174,7 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
         return;
       }
 
-      if (isSpacePressedRef.current && interactionMode !== 'pan') {
+      if (!state.viewLocked && isSpacePressedRef.current && interactionMode !== 'pan') {
         event.preventDefault();
         event.stopPropagation();
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -1385,6 +1393,10 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
 
     function handleWheel(event: WheelEvent<HTMLCanvasElement>) {
       if (!image) return;
+      if (state.viewLocked) {
+        event.preventDefault();
+        return;
+      }
 
       if (event.metaKey || event.ctrlKey) {
         event.preventDefault();
@@ -1473,7 +1485,8 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
               data-panning={isPanning}
               data-sampling={interactionMode === 'sample'}
               data-color-isolate={interactionMode === 'color-isolate'}
-              data-view-pan-ready={isSpacePressed}
+              data-view-pan-ready={isSpacePressed && !state.viewLocked}
+              data-view-locked={state.viewLocked}
               data-view-panning={isViewPanning}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
@@ -1502,16 +1515,26 @@ export const CanvasStage = forwardRef<HTMLCanvasElement, CanvasStageProps>(
             <span className="sample-loupe-swatch" style={{ backgroundColor: samplePreview.hex }} />
           </div>
         ) : null}
-        {isViewAdjusted ? (
-          <button
-            type="button"
-            className="view-fit-button"
-            onClick={resetViewTransform}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <span>{Math.round(viewTransform.zoom * 100)}%</span>
-            <strong>Fit</strong>
-          </button>
+        {image ? (
+          <div className="view-controls" role="group" aria-label="View controls" onPointerDown={(event) => event.stopPropagation()}>
+            {isViewAdjusted && !state.viewLocked ? (
+              <button type="button" className="view-fit-button" onClick={resetViewTransform}>
+                <span>{Math.round(viewTransform.zoom * 100)}%</span>
+                <strong>Fit</strong>
+              </button>
+            ) : <span className="view-zoom-label">{Math.round(viewTransform.zoom * 100)}%</span>}
+            <button
+              type="button"
+              className="view-lock-button"
+              aria-label={state.viewLocked ? 'Unlock view' : 'Lock view'}
+              aria-pressed={state.viewLocked}
+              title={state.viewLocked ? 'Unlock view' : 'Lock view'}
+              onClick={onToggleViewLock}
+            >
+              {state.viewLocked ? <Lock size={15} aria-hidden="true" /> : <Unlock size={15} aria-hidden="true" />}
+              {state.viewLocked ? <span>Locked</span> : null}
+            </button>
+          </div>
         ) : null}
       </div>
     );

@@ -294,6 +294,7 @@ function normalizeStoredState(state: Partial<Omit<WorkspaceState, 'image'>>): Om
 
   return {
     view: normalizeSavedView(state.view),
+    viewLocked: state.viewLocked === true,
     canvas: {
       ...initialWorkspaceState.canvas,
       ...state.canvas,

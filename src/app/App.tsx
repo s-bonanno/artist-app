@@ -290,6 +290,7 @@ function createWorkspaceFromDefaults(
     canvas: imageOrientation ? orientCanvasToImage(defaults.canvas, imageOrientation) : { ...defaults.canvas },
     viewport: { ...initialWorkspaceState.viewport },
     view: { ...initialWorkspaceState.view },
+    viewLocked: false,
     grid: { ...defaults.grid },
     filters: { ...defaults.filters, showOriginal: false },
     values: { ...defaults.values },

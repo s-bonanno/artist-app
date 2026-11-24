@@ -414,6 +414,7 @@ export function Workspace({
   }
 
   function updateViewport(nextViewport: Partial<WorkspaceState['viewport']>) {
+    if (state.viewLocked) return;
     onChange({
       ...state,
       viewport: {
@@ -424,6 +425,7 @@ export function Workspace({
   }
 
   function setViewport(viewport: WorkspaceState['viewport']) {
+    if (state.viewLocked) return;
     onChange({
       ...state,
       viewport,
@@ -652,6 +654,7 @@ export function Workspace({
   }
 
   function startMoveZoomMode() {
+    if (state.viewLocked) return;
     setActiveSlider(null);
     setIsPaletteSampling(false);
     setHighlightedColorStudyHex(null);
@@ -661,6 +664,13 @@ export function Workspace({
 
   function stopMoveZoomMode() {
     setIsMoveZoomMode(false);
+  }
+
+  function toggleViewLock() {
+    const viewLocked = !state.viewLocked;
+    setIsMoveZoomMode(false);
+    setWorkspaceNotice(viewLocked ? 'View locked' : 'View unlocked');
+    onChange({ ...state, viewLocked });
   }
 
   function requestLeaveWorkspace() {
@@ -746,6 +756,7 @@ export function Workspace({
       canvas: { ...canvas },
       viewport: { ...initialWorkspaceState.viewport },
       view: { ...initialWorkspaceState.view },
+      viewLocked: false,
       grid: { ...initialWorkspaceState.grid },
       filters: { ...initialWorkspaceState.filters },
       values: { ...initialWorkspaceState.values },
@@ -1419,22 +1430,23 @@ export function Workspace({
 
         {activeTool === 'zoom' ? (
           <div className="tool-panel-content">
+            {state.viewLocked ? <p className="view-lock-help">Unlock the view to reposition the reference.</p> : null}
             <div className="zoom-actions">
-              <button type="button" className="icon-button" title="Zoom out" onClick={() => stepZoom('out')}>
+              <button type="button" className="icon-button" title="Zoom out" onClick={() => stepZoom('out')} disabled={state.viewLocked}>
                 <Minus size={16} />
               </button>
-              <button type="button" className="secondary-button" onClick={fitReferenceToCanvas}>
+              <button type="button" className="secondary-button" onClick={fitReferenceToCanvas} disabled={state.viewLocked}>
                 Fit
               </button>
-              <button type="button" className="secondary-button" onClick={fillReferenceToCanvas} disabled={!imageDimensions}>
+              <button type="button" className="secondary-button" onClick={fillReferenceToCanvas} disabled={!imageDimensions || state.viewLocked}>
                 Fill
               </button>
-              <button type="button" className="icon-button" title="Zoom in" onClick={() => stepZoom('in')}>
+              <button type="button" className="icon-button" title="Zoom in" onClick={() => stepZoom('in')} disabled={state.viewLocked}>
                 <Plus size={16} />
               </button>
             </div>
 
-            <button type="button" className="secondary-button move-zoom-button" onClick={startMoveZoomMode} disabled={!state.image}>
+            <button type="button" className="secondary-button move-zoom-button" onClick={startMoveZoomMode} disabled={!state.image || state.viewLocked}>
               <Move size={14} />
               <span>Move &amp; Zoom</span>
             </button>
@@ -1544,7 +1556,8 @@ export function Workspace({
 
       <div
         className="edit-canvas-wrap"
-        onPointerDownCapture={() => {
+        onPointerDownCapture={(event) => {
+          if (event.target instanceof Element && event.target.closest('.view-controls')) return;
           setIsWorkspaceMenuOpen(false);
 
           if (!activeTool || isMoveZoomMode) return;
@@ -1642,6 +1655,7 @@ export function Workspace({
           onValueStudyTonesChange={setValueStudyTones}
           onViewportChange={setViewport}
           onViewChange={(view) => onChange({ ...state, view })}
+          onToggleViewLock={toggleViewLock}
         />
       </div>
 

@@ -7,6 +7,7 @@ export type WorkspaceState = {
   image: ReferenceImage | null;
   // Viewing magnification/pan, separate from image placement within the canvas.
   view: { zoom: number; panX: number; panY: number };
+  viewLocked: boolean;
   canvas: {
     widthCm: number;
     heightCm: number;
@@ -49,6 +50,7 @@ export type WorkspaceState = {
 export const initialWorkspaceState: WorkspaceState = {
   image: null,
   view: { zoom: 1, panX: 0, panY: 0 },
+  viewLocked: false,
   canvas: {
     widthCm: 21,
     heightCm: 29.7,
